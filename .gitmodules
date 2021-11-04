@@ -1,0 +1,3 @@
+[submodule "activities"]
+	path = activities
+	url = git@github.com:JMU-Wearable-Computing/activities.git
