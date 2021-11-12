@@ -1,5 +1,5 @@
 from os.path import join
-from typing import Dict, Optional, Sequence
+from typing import Callable, Dict, Optional, Sequence
 from pandas.io.parsers import read_table
 import torch
 import numpy as np
@@ -18,9 +18,10 @@ from skillest.utils import get_activity_data_info
 from numpy.random import randint
 import random
 
+transformation_t = Callable[[np.array], np.array]
+
 
 class IMUDataModule(LightningDataModule):
-
     def __init__(self,
                  data_dir: str,
                  activities: Sequence[str],
@@ -31,10 +32,29 @@ class IMUDataModule(LightningDataModule):
                  num_seconds: int = 10,
                  num_batches: int = 1000,
                  feature_columns: Sequence[str] = None,
-                 transformations: Optional[Sequence[FunctionSchema]] = None,
+                 transformations: Optional[Sequence[transformation_t]] = None,
                  return_activities: bool = False,
                  return_user: bool = False,
                  **dataloader_kwargs):
+        """Creates a new instance of IMUDataModule.
+
+        Args:
+            data_dir (str): Directory that the data resides in. Ex: activities/Actitracker
+            activities (Sequence[str]): Activities that wanted from the data file.
+            activities_to_idx (Dict[str, int]): Mapping of each activity to an int.
+            sample_rate_per_sec (int): Sample rate per second that the data represents.
+            file_prefix (str, optional): File prefix to add data_dir. Defaults to ".".
+            batch_size (int, optional): Batch size for training. Defaults to 256.
+            num_seconds (int, optional): Number of seconds per sequence. Total sequence length
+                is num_seconds * sample_rate_per_sec. Defaults to 10.
+            num_batches (int, optional): Number of batches the DataLoaders will return. Defaults to 1000.
+            feature_columns (Sequence[str], optional): Features columns to use from the data. 
+                These will automatically be gotten if left unspecified. Defaults to None.
+            transformations (Optional[Sequence[Callable[[np.array], np.array]]], optional): List of 
+                transformations to apply to the data. Defaults to None.
+            return_activities (bool, optional): Should activity labels be returned each batch. Defaults to False.
+            return_user (bool, optional): Should user labels be returned each batch. Defaults to False.
+        """
         super().__init__()
 
         self.data_dir = join(file_prefix, data_dir)
