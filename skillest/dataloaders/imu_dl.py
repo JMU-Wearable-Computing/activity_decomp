@@ -1,10 +1,7 @@
 from os.path import join
 from typing import Callable, Dict, Optional, Sequence
-from pandas.io.parsers import read_table
 import torch
 import numpy as np
-from torch._C import FunctionSchema
-from torch.functional import _return_counts
 from torch.utils.data import DataLoader, TensorDataset
 
 from pytorch_lightning import LightningDataModule
@@ -19,6 +16,130 @@ from numpy.random import randint
 import random
 
 transformation_t = Callable[[np.array], np.array]
+
+
+class IMUDataset(torch.utils.data.IterableDataset):
+
+    def __init__(self,
+                 data: Sequence[Dict[str, np.array]], 
+                 activities: Sequence[str],
+                 activities_to_idx: Dict[str, int],
+                 samples_per_window: int,
+                 batch_size, int = 256,
+                 feature_columns: Sequence[str] = None,
+                 transformations: Optional[Sequence[transformation_t]] = None,
+                 return_user: bool = True,
+                 return_activities: bool = True,
+                ):
+        self.data = data
+        self.activies = activities
+        self.activies_to_idx = activities_to_idx
+        self.samples_per_window = samples_per_window
+        self.batch_size = batch_size
+        self.feature_columns = feature_columns
+        self.transformations = transformations
+        self.return_user = return_user
+        self.return_activities = return_activities
+
+    def generate_windows(self, data: Sequence[Dict[str, np.array]]) -> Sequence[np.array]:
+        """ Generate random windows from user activity data.
+        Random numbers of windows are obtained from each user and activity.
+
+        Args:
+            data (Sequence[Dict[str, np.array]]): Data to generate windos from.
+
+        Returns:
+            [Sequence[np.array]]: windows, user labels (optional), activity labels (optional)
+        """
+        n_users = len(data)
+        channels = len(self.feature_columns)
+
+        # Set up empty numpy ararys to load data into
+        windows = np.zeros([self.batch_size, self.samples_per_window, channels])
+        if self.return_user:
+            user_labels = np.zeros(self.batch_size)
+        if self.return_activities:
+            activity_labels = np.zeros(self.batch_size, dtype='<U20')
+
+        # Decide how many times each user should be included
+        users, counts = np.unique(np.random.randint(
+            n_users, size=self.batch_size), return_counts=True)
+        total_idx = 0
+        for i, user in enumerate(data):
+            # Incase of unlucky randint that misses a user
+            count_idx = np.nonzero(users == i)[0] # nonzero returns a tuple
+            if count_idx.size == 0: # If true we missed a user
+                continue # Go to next user
+            count_idx = count_idx[0] # Gets first (and only) element with the index
+
+            user_count = counts[count_idx]
+
+            if self.return_user:
+                user_labels[total_idx: total_idx + user_count] = i
+            # Chose random activities. Not all users have the same activities. act is array of str.
+            act, act_counts = np.unique(random.choices(
+                list(user.keys()), k=user_count), return_counts=True)
+            for a, ac in zip(act, act_counts):
+                end_idx = total_idx + ac
+                windows[total_idx: end_idx] = self.sample_windows(user[a], ac)
+                if self.return_activities:
+                    activity_labels[total_idx: end_idx] = a
+                total_idx = end_idx
+        assert total_idx == windows.shape[0]
+
+        # Build output array
+        out = [windows, ]
+        if self.return_user:
+            out.append(user_labels)
+        if self.return_activities:
+            acts, inv = np.unique(activity_labels, return_inverse=True)
+            activity_labels = np.array(
+                [self.activies_to_idx[a] for a in acts])[inv]
+            out.append(activity_labels)
+
+        return out
+
+    def sample_windows(self, sample: np.array, count: int) -> np.array:
+        """Samples `count` random windows from the given IMU sample. 
+
+        Args:
+            sample (np.array): Data to generate windows from.
+            count (int): Number of windows to generate from. 
+
+        Returns:
+            np.array: Windowed data.
+        """
+        window_starts = randint(
+            sample.shape[0] - self.samples_per_window, size=[count])
+        window_ends = window_starts + self.samples_per_window
+        windows = np.empty([count, self.samples_per_window, sample.shape[-1]])
+        for i in range(count):
+            windows[i] = sample[window_starts[i]: window_ends[i]]
+        return windows
+
+    def apply_transformations(self, windows: np.array) -> np.array:
+        """ Apply transformations to the windows. 
+
+        Args:
+            windows (np.array): Windows to apply transformations to.
+            shape expected [N, seq_len, num_channels]
+
+        Returns:
+            np.array: Windows with transformations applied. 
+        """
+        for t in self.transformations:
+            windows = t(windows)
+        return windows
+
+    def __iter__(self): 
+        return self
+
+    def __next__(self):
+        data = self.generate_windows(self.data)
+        # data = self.shuffle(data)
+        # Data[0] is the windowed data
+        data[0] = self.apply_transformations(data[0])
+        return data
 
 
 class IMUDataModule(LightningDataModule):
@@ -87,120 +208,19 @@ class IMUDataModule(LightningDataModule):
             data (Sequence[Dict[str, np.array]]): Data to build from.
 
         Returns:
-            [TensorDataset]: TensorDataset that can iterate over
-            windowed, shuffled, and transformed data and labels.
+            [IMUDataset]: IMUDataset that can iterate over
+            windowed, and transformed data and labels.
         """
-        # Data now conatins windows and optionally user and activity labels.
-        data = self.generate_windows(self.train)
-        data = self.shuffle(data)
-        # Data[0] is the windowed data
-        data[0] = self.apply_transformations(data[0])
-        # Transform from numpy to pytorch
-        data = [torch.tensor(t) for t in data]
-        dataset = TensorDataset(*data)
+        dataset = IMUDataset(data=data, 
+                             activities=self.activies,
+                             activities_to_idx=self.activies_to_idx,
+                             samples_per_window=self.samples_per_window, 
+                             batch_size=self.batch_size,
+                             feature_columns=self.feature_columns,
+                             transformations=self.transformations,
+                             return_user=self.return_user,
+                             return_activities=self.return_activities)
         return dataset
-
-    def sample_windows(self, sample: np.array, count: int) -> np.array:
-        """Samples `count` random windows from the given IMU sample. 
-
-        Args:
-            sample (np.array): Data to generate windows from.
-            count (int): Number of windows to generate from. 
-
-        Returns:
-            np.array: Windowed data.
-        """
-        window_starts = randint(
-            sample.shape[0] - self.samples_per_window, size=[count])
-        window_ends = window_starts + self.samples_per_window
-        windows = np.empty([count, self.samples_per_window, sample.shape[-1]])
-        for i in range(count):
-            windows[i] = sample[window_starts[i]: window_ends[i]]
-        return windows
-
-    def generate_windows(self, data: Sequence[Dict[str, np.array]]) -> Sequence[np.array]:
-        """ Generate random windows from user activity data.
-        Random numbers of windows are obtained from each user and activity.
-
-        Args:
-            data (Sequence[Dict[str, np.array]]): Data to generate windos from.
-
-        Returns:
-            [Sequence[np.array]]: windows, user labels (optional), activity labels (optional)
-        """
-        n_users = len(data)
-        channels = len(self.feature_columns)
-        total_samples = self.batch_size * self.num_batches
-
-        # Set up empty numpy ararys to load data into
-        windows = np.zeros([total_samples, self.samples_per_window, channels])
-        if self.return_user:
-            user_labels = np.zeros(total_samples)
-        if self.return_activities:
-            activity_labels = np.zeros(total_samples, dtype='<U20')
-
-        # Decide how many times each user should be included
-        users, counts = np.unique(np.random.randint(
-            n_users, size=total_samples), return_counts=True)
-        total_idx = 0
-        for i, user in enumerate(data):
-            # Get number of activities
-            num_acts = len(user)
-            # Incase of unlucky randint that misses a user
-            count_idx = np.nonzero(users == i)[0][0]
-            user_count = counts[count_idx]
-
-            if self.return_user:
-                user_labels[total_idx: total_idx + user_count] = i
-            # Chose random activities. Not all users have the same activities. act is array of str.
-            act, act_counts = np.unique(random.choices(
-                list(user.keys()), k=user_count), return_counts=True)
-            for a, ac in zip(act, act_counts):
-                end_idx = total_idx + ac
-                windows[total_idx: end_idx] = self.sample_windows(user[a], ac)
-                if self.return_activities:
-                    activity_labels[total_idx: end_idx] = a
-                total_idx = end_idx
-        assert total_idx == windows.shape[0]
-
-        # Build output array
-        out = [windows, ]
-        if self.return_user:
-            out.append(user_labels)
-        if self.return_activities:
-            acts, inv = np.unique(activity_labels, return_inverse=True)
-            activity_labels = np.array(
-                [self.activies_to_idx[a] for a in acts])[inv]
-            out.append(activity_labels)
-
-        return out
-
-    def apply_transformations(self, windows: np.array) -> np.array:
-        """ Apply transformations to the windows. 
-
-        Args:
-            windows (np.array): Windows to apply transformations to.
-            shape expected [N, seq_len, num_channels]
-
-        Returns:
-            np.array: Windows with transformations applied. 
-        """
-        for t in self.transformations:
-            windows = t(windows)
-        return windows
-
-    def shuffle(self, data: Sequence[np.array]) -> Sequence[np.array]:
-        """Shuffles the indicies of the data.
-
-        Args:
-            data (Sequence[np.array]): Data to shuffle. Should include labels if there are any.
-
-        Returns:
-            Sequence[np.array]: Shuffled data and labels.
-        """
-        N = data[0].shape[0]
-        shuffle = np.random.permutation(N)
-        return [t[shuffle] for t in data]
 
     def reformat(self, df: pd.DataFrame) -> Sequence[Dict[str, np.array]]:
         """Reformats the dataframe table to a dict with activity keys mapping to 
@@ -239,20 +259,21 @@ class IMUDataModule(LightningDataModule):
         elif stage == "test":
             test_df = pd.read_csv(self.test_path)
             self.test = self.reformat(test_df)
-
+    
     def train_dataloader(self):
+        # return self.get_dataset(self.train)
         return DataLoader(self.get_dataset(self.train),
-                          batch_size=self.batch_size,
+                          batch_size=None,
                           **self.dataloader_kwargs)
 
     def val_dataloader(self):
         return DataLoader(self.get_dataset(self.val),
-                          batch_size=self.batch_size,
+                          batch_size=None,
                           **self.dataloader_kwargs)
 
     def test_dataloader(self):
         return DataLoader(self.get_dataset(self.test),
-                          batch_size=self.batch_size,
+                          batch_size=None,
                           **self.dataloader_kwargs)
 
     def teardown(self, stage: Optional[str] = None):

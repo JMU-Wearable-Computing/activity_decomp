@@ -42,7 +42,8 @@ class ActitrackerDL(IMUDataModule):
                          transformations=transformations,
                          return_activities=return_activities,
                          return_user=return_user,
-                         num_batches=num_batches)
+                         num_batches=num_batches,
+                         **dataloader_kwargs)
 
             
 if __name__ == "__main__":
@@ -56,15 +57,20 @@ if __name__ == "__main__":
         time_segment_permutation_transform_improved,
         time_warp_transform_improved
     ]
-    dl = ActitrackerDL(num_workers=2, transformations=transformations, return_user=True, return_activities=True)
+    dl = ActitrackerDL(num_workers=8, transformations=transformations, return_user=True, return_activities=True)
     dl.setup("fit")
-    d = dl.train_dataloader()
+    d = iter(dl.train_dataloader())
     from datetime import datetime
     start = datetime.now()
-    for idx, sample in enumerate(d):
-        if idx == 0:
-            print(f"{idx}: {sample}")
+    idx = 0
+    while idx < 1000:
+        batch = next(d)
+        if idx < 2:
+            print(f"{idx}: {batch}")
+            # print(f"{idx}: {next(batch)}")
         pass
+        idx += 1
+    print(idx)
     end = datetime.now()
     dl.teardown("fit")
     print(f"Duration: {end - start}")
