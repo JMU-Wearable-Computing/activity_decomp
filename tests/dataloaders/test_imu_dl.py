@@ -19,22 +19,33 @@ from skillest.dataloaders import (ACTITRCKER_ACTIVITIES,
                                   ACTITRCKER_DIR,
                                   ACTITRCKER_ACTIVITIES_TO_IDX)
 
-def test_dataloader():
-    """Test dataloader to confirm all users and activities are represented.
-    """
-    train_data = pd.read_csv(join(ACTITRCKER_DIR, "train.csv"))
-    og_dists = train_data["Activity"].value_counts().values
-    idx_to_activities = {v: k for k,v in ACTITRCKER_ACTIVITIES_TO_IDX.items()}
+
+@pytest.fixture(scope='module')
+def global_data():
+    data = {}
+    data["train_data"] = pd.read_csv(join(ACTITRCKER_DIR, "train.csv"))
+    data["og_dists"] = data["train_data"]["Activity"].value_counts().values
+    data["idx_to_activities"] = {v: k for k,v in ACTITRCKER_ACTIVITIES_TO_IDX.items()}
+
+    _, feature_columns = get_activity_data_info(ACTITRCKER_DIR)
+
+    assert not np.any(np.isnan(data["train_data"][feature_columns].values))
 
     transformations = [
         time_flip_transform_vectorized,
     ]
-    dl = ActitrackerDL(num_workers=0, transformations=transformations, return_user=True, return_activities=True)
-    dl.setup("fit")
-    d = iter(dl.train_dataloader())
+    data["dl"] = ActitrackerDL(num_workers=0, transformations=transformations, return_user=True, return_activities=True)
+    data["dl"].setup("fit")
+    return data
 
-    cat_sums = torch.zeros(len(idx_to_activities))
-    user_sums = torch.zeros(len(train_data["UserID"].unique()))
+
+def test_dataloader(global_data):
+    """Test dataloader to confirm all users and activities are represented.
+    """
+    d = iter(global_data["dl"].train_dataloader())
+
+    cat_sums = torch.zeros(len(global_data["idx_to_activities"]))
+    user_sums = torch.zeros(len(global_data["train_data"]["UserID"].unique()))
     idx = 0
     while idx < 10:
         batch = next(d)
@@ -49,7 +60,21 @@ def test_dataloader():
     assert all(cat_sums > 0)
     assert all(user_sums > 0)
 
-    dl.teardown("fit")
+
+
+def test_nans(global_data):
+    """Test dataloader to confirm all users and activities are represented.
+    """
+    d = iter(global_data["dl"].train_dataloader())
+
+    idx = 0
+    while idx < 1000:
+        batch = next(d)
+        assert not torch.any(torch.isnan(batch[0]))
+        assert not torch.any(torch.isnan(batch[1]))
+        assert not torch.any(torch.isnan(batch[2]))
+
+        idx += 1
 
 
 def disabled_test_distributions():
