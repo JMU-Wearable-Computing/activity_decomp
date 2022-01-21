@@ -5,4 +5,5 @@ ACTITRCKER_ACTIVITIES = ["Walking", "Jogging", "Upstairs", "Downstairs", "Sittin
 ACTITRCKER_ACTIVITIES_TO_IDX = {a: i for i, a in enumerate(ACTITRCKER_ACTIVITIES)}
 
 
-from actitracker_dl import ActitrackerDL
+from skillest.dataloaders.actitracker_dl import ActitrackerDL
+from skillest.dataloaders.imu_dl import IMUDataModule, IMUDataset
