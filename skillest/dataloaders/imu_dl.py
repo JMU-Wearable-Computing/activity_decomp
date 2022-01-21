@@ -44,6 +44,8 @@ class IMUDataset(torch.utils.data.IterableDataset):
     def generate_windows(self, data: Sequence[Dict[str, np.array]]) -> Sequence[np.array]:
         """ Generate random windows from user activity data.
         Random numbers of windows are obtained from each user and activity.
+        This selects instances by uniformly selecting authors, and then activities
+        from the chosen atuhors. 
 
         Args:
             data (Sequence[Dict[str, np.array]]): Data to generate windos from.

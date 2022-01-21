@@ -18,6 +18,7 @@ from skillest.dataloaders.transformations import (channel_shuffle_transform_vect
                                                   time_segment_permutation_transform_improved,
                                                   time_warp_transform_improved,
                                                   time_warp_transform_low_cost)
+from skillest.utils.visualize_imu import plot_activity
 
 
 class ActitrackerDL(IMUDataModule):
@@ -74,4 +75,11 @@ if __name__ == "__main__":
     end = datetime.now()
     dl.teardown("fit")
     print(f"Duration: {end - start}")
+
+
+    # sample = next(d)
+    # print(diff)
+    # print(sample)
+    # plot_activity(sample[0][0], 50)
+    # dl.teardown("fit")
 
