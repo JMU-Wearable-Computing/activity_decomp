@@ -60,7 +60,7 @@ if __name__ == "__main__":
     ]
     dl = ActitrackerDL(num_workers=8, transformations=transformations, return_user=True, return_activities=True)
     dl.setup("fit")
-    d = iter(dl.train_dataloader())
+    d = iter(dl.val_dataloader())
     from datetime import datetime
     start = datetime.now()
     idx = 0

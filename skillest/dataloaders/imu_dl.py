@@ -7,10 +7,6 @@ from torch.utils.data import DataLoader, TensorDataset
 from pytorch_lightning import LightningDataModule
 import pandas as pd
 
-from skillest.dataloaders import (ACTITRCKER_ACTIVITIES,
-                                  ACTITRCKER_DIR,
-                                  ACTITRCKER_SAMPLE_RATE_PER_SEC,
-                                  ACTITRCKER_XML_FILEPATH)
 from skillest.utils import get_activity_data_info
 from numpy.random import randint
 import random
@@ -140,7 +136,7 @@ class IMUDataset(torch.utils.data.IterableDataset):
         data = self.generate_windows(self.data)
         # data = self.shuffle(data)
         # Data[0] is the windowed data
-        data[0] = self.apply_transformations(data[0])
+        data[0] = self.apply_transformations(data[0]).astype(np.float32)
         return data
 
 
@@ -200,14 +196,18 @@ class IMUDataModule(LightningDataModule):
             self.feature_columns = feature_columns
         else:
             _, self.feature_columns = get_activity_data_info(self.data_dir)
+        
+        self.data_shape = [self.batch_size, self.samples_per_window, len(self.feature_columns)]
+        self.num_activities = len(self.activies)
 
         self.save_hyperparameters()
 
-    def get_dataset(self, data: Sequence[Dict[str, np.array]]) -> TensorDataset:
+    def get_dataset(self, data: Sequence[Dict[str, np.array]], use_transformations: bool=False) -> TensorDataset:
         """Builds dataset from the given reformatted data.
 
         Args:
             data (Sequence[Dict[str, np.array]]): Data to build from.
+            use_transformations (bool): Flag indicating if transormations should be applied
 
         Returns:
             [IMUDataset]: IMUDataset that can iterate over
@@ -219,7 +219,7 @@ class IMUDataModule(LightningDataModule):
                              samples_per_window=self.samples_per_window, 
                              batch_size=self.batch_size,
                              feature_columns=self.feature_columns,
-                             transformations=self.transformations,
+                             transformations=self.transformations if use_transformations else [],
                              return_user=self.return_user,
                              return_activities=self.return_activities)
         return dataset
@@ -266,8 +266,7 @@ class IMUDataModule(LightningDataModule):
         return [torch.from_numpy(mat.copy()) for mat in batch]
         
     def train_dataloader(self):
-        # return self.get_dataset(self.train)
-        return DataLoader(self.get_dataset(self.train),
+        return DataLoader(self.get_dataset(self.train, use_transformations=True),
                           batch_size=None,
                           collate_fn=self.collate_fn,
                           **self.dataloader_kwargs)
