@@ -7,7 +7,7 @@ from skillest.dataloaders import (ACTITRCKER_ACTIVITIES, ACTITRCKER_ACTIVITIES_T
                                   ACTITRCKER_DIR,
                                   ACTITRCKER_SAMPLE_RATE_PER_SEC)
 from skillest.dataloaders import transformations
-from skillest.dataloaders.imu_dl import IMUDataModule
+from skillest.dataloaders.imu_dl import ContrastiveIMUDataset, IMUDataModule, IMUDataset
 from skillest.dataloaders.transformations import (channel_shuffle_transform_vectorized, 
                                                   get_cubic_spline_interpolation,
                                                   negate_transform_vectorized,
@@ -58,7 +58,7 @@ if __name__ == "__main__":
         time_segment_permutation_transform_improved,
         time_warp_transform_improved
     ]
-    dl = ActitrackerDL(num_workers=8, transformations=transformations, return_user=True, return_activities=True)
+    dl = ActitrackerDL(num_workers=0, transformations=transformations, return_user=True, return_activities=True, dataset_type=ContrastiveIMUDataset)
     dl.setup("fit")
     d = iter(dl.val_dataloader())
     from datetime import datetime
@@ -67,8 +67,9 @@ if __name__ == "__main__":
     while idx < 1000:
         batch = next(d)
         if idx < 2:
-            print(f"{idx}: {batch}")
+            # print(f"{idx}: {batch}")
             # print(f"{idx}: {next(batch)}")
+            pass
         pass
         idx += 1
     print(idx)

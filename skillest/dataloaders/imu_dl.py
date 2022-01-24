@@ -140,6 +140,23 @@ class IMUDataset(torch.utils.data.IterableDataset):
         return data
 
 
+class ContrastiveIMUDataset(IMUDataset):
+    """IMUDataset set up for contrastive learning. Specificially it repeats the data twice
+    before applying transformations.
+
+    Args:
+        IMUDataset (torch.utils.data.IterableDataset): Parent IMUDataset type
+    """
+
+    def __next__(self):
+        data = self.generate_windows(self.data)
+        # Repeat data twice
+        data = [np.concatenate([mat, mat], axis=0) for mat in data]
+        # Data[0] is the windowed data
+        data[0] = self.apply_transformations(data[0]).astype(np.float32)
+        return data
+
+
 class IMUDataModule(LightningDataModule):
     def __init__(self,
                  data_dir: str,
@@ -154,6 +171,7 @@ class IMUDataModule(LightningDataModule):
                  transformations: Optional[Sequence[transformation_t]] = None,
                  return_activities: bool = False,
                  return_user: bool = False,
+                 dataset_type: IMUDataset = IMUDataset,
                  **dataloader_kwargs):
         """Creates a new instance of IMUDataModule.
 
@@ -186,6 +204,7 @@ class IMUDataModule(LightningDataModule):
         self.transformations = transformations
         self.return_activities = return_activities
         self.return_user = return_user
+        self.datset_type = dataset_type
         self.dataloader_kwargs = dataloader_kwargs
 
         self.train_path = join(self.data_dir, "train.csv")
@@ -213,7 +232,7 @@ class IMUDataModule(LightningDataModule):
             [IMUDataset]: IMUDataset that can iterate over
             windowed, and transformed data and labels.
         """
-        dataset = IMUDataset(data=data, 
+        dataset = self.datset_type(data=data, 
                              activities=self.activies,
                              activities_to_idx=self.activies_to_idx,
                              samples_per_window=self.samples_per_window, 
