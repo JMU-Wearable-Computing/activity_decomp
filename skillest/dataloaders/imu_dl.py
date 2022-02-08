@@ -137,7 +137,7 @@ class IMUDataset(torch.utils.data.IterableDataset):
         # data = self.shuffle(data)
         # Data[0] is the windowed data
         data[0] = self.apply_transformations(data[0]).astype(np.float32)
-        return data
+        return [mat.copy() for mat in data]
 
 
 class ContrastiveIMUDataset(IMUDataset):
@@ -154,7 +154,7 @@ class ContrastiveIMUDataset(IMUDataset):
         data = [np.concatenate([mat, mat], axis=0) for mat in data]
         # Data[0] is the windowed data
         data[0] = self.apply_transformations(data[0]).astype(np.float32)
-        return data
+        return [mat.copy() for mat in data]
 
 
 class IMUDataModule(LightningDataModule):
@@ -281,25 +281,19 @@ class IMUDataModule(LightningDataModule):
             test_df = pd.read_csv(self.test_path)
             self.test = self.reformat(test_df)
     
-    def collate_fn(self, batch):
-        return [torch.from_numpy(mat.copy()) for mat in batch]
-        
     def train_dataloader(self):
         return DataLoader(self.get_dataset(self.train, use_transformations=True),
                           batch_size=None,
-                          collate_fn=self.collate_fn,
                           **self.dataloader_kwargs)
 
     def val_dataloader(self):
         return DataLoader(self.get_dataset(self.val),
                           batch_size=None,
-                          collate_fn=self.collate_fn,
                           **self.dataloader_kwargs)
 
     def test_dataloader(self):
         return DataLoader(self.get_dataset(self.test),
                           batch_size=None,
-                          collate_fn=self.collate_fn,
                           **self.dataloader_kwargs)
 
     def teardown(self, stage: Optional[str] = None):

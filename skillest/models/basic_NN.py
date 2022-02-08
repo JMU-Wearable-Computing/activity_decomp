@@ -87,7 +87,7 @@ if __name__ == '__main__':
         time_segment_permutation_transform_improved,
         time_warp_transform_improved
     ]
-    dl = ActitrackerDL(num_workers=0, transformations=transformations, return_activities=True)
+    dl = ActitrackerDL(num_workers=4, transformations=transformations, return_activities=True)
     dl.setup("fit")
 
     # Batch, time step, channels
@@ -99,11 +99,13 @@ if __name__ == '__main__':
                                             entity="jmu-wearable-computing",
                                             save_dir="logs/",
                                             log_model=True)
+    wandb_logger.experiment.config["transformations"] = transformations
 
-    trainer = pl.Trainer(max_epochs=30,
+    trainer = pl.Trainer(max_epochs=2,
                             val_check_interval=1.0,
-                            limit_train_batches=10, 
-                            limit_val_batches=2, 
+                            limit_train_batches=1000, 
+                            limit_val_batches=500, 
                             num_sanity_val_steps=1,
-                            logger = [tb_logger, wandb_logger])
+                            logger = [tb_logger, wandb_logger],
+                            log_every_n_steps=1)
     trainer.fit(model, datamodule=dl)
