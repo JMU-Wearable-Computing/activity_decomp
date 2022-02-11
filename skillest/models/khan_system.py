@@ -106,7 +106,7 @@ class KhanSystem(pl.LightningModule):
 
         mean = np.mean(x_t, axis=3, keepdims=True)
         std = np.std(x_t, axis=3, keepdims=True)
-        # fft = np.fft.fft(x_t, axis=3).view(np.float32)
+        fft = np.fft.fft(x_t, axis=3).view(np.float32)
         # cor_coef ??? no idea what khan means this to be
 
         # staistic: [B, n_segments, C, ?]
@@ -189,8 +189,8 @@ if __name__ == "__main__":
     val_loader = dl.val_dataloader()
 
     sax_params = {"n_segments": 20, "alphabet_size_avg": 5, "scale": True}
-    high_level_model_kwargs = {"max_iter": 10000}
-    low_level_classifier_kwargs = {"max_iter": 10000}
+    high_level_model_kwargs = {"max_iter": 2000}
+    low_level_classifier_kwargs = {"max_iter": 2000}
 
     ks = KhanSystem(sax_params, 
                     high_level_model=LinearSVC,
