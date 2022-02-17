@@ -10,7 +10,7 @@ from pytorch_lightning import loggers as pl_loggers
 import os
 import wandb
 
-from skillest.dataloaders import ActitrackerDL
+from skillest.dataloaders import ActitrackerDL, UIPRMDDataloader
 from tslearn.piecewise import SymbolicAggregateApproximation
 
 from skillest.dataloaders.transformations import (channel_shuffle_transform_vectorized, 
@@ -180,10 +180,11 @@ class KhanSystem(pl.LightningModule):
 
 
 if __name__ == "__main__":
-    transformations = [
-    ]
-    dl = ActitrackerDL(batch_size=10000, num_batches=1,
-                       num_workers=8, return_activities=True, transformations=transformations)
+    # transformations = [
+    # ]
+    # dl = ActitrackerDL(batch_size=10000, num_batches=1,
+    #                    num_workers=8, return_activities=True, transformations=transformations)
+    dl = UIPRMDDataloader(batch_size=-1)
     dl.setup("fit")
     train_loader = dl.train_dataloader()
     val_loader = dl.val_dataloader()
