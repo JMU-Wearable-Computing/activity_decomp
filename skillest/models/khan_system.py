@@ -71,8 +71,9 @@ class KhanSystem(pl.LightningModule):
         """
         b, t, c = x.shape
         # pad x so that we can evenly divide t into n_segments
-        pad = t % n_segments
+        pad = n_segments - t % n_segments
         x_padded = np.pad(x, [(0, 0), (0, pad), (0, 0)])
+        assert int((t + pad) / n_segments) == (t + pad) / n_segments
         return x_padded.reshape([b, n_segments, int((t + pad) / n_segments), c])
 
     def gen_low_level_features(self, x: np.array):
@@ -199,12 +200,12 @@ if __name__ == "__main__":
                     high_level_model_kwargs=high_level_model_kwargs,
                     low_level_classifier_kwargs=low_level_classifier_kwargs)
 
-    tb_logger = pl_loggers.TensorBoardLogger("logs/")
-    wandb_logger = pl_loggers.WandbLogger(  # name="svm_test",
-        project="test",
-        entity="jmu-wearable-computing",
-        save_dir="logs/",
-        log_model=True)
+    # tb_logger = pl_loggers.TensorBoardLogger("logs/")
+    # wandb_logger = pl_loggers.WandbLogger(  # name="svm_test",
+    #     project="test",
+    #     entity="jmu-wearable-computing",
+    #     save_dir="logs/",
+    #     log_model=True)
     # wandb_logger.watch(svm)
     # run = wandb_logger.experiment
     # model_artifact = run.Artifact("svm", type="svm")
@@ -216,7 +217,7 @@ if __name__ == "__main__":
                          limit_train_batches=1,
                          limit_val_batches=0.0,
                          num_sanity_val_steps=0,
-                         logger=[tb_logger, wandb_logger],
+                        #  logger=[tb_logger, wandb_logger],
                          log_every_n_steps=1)
     trainer.fit(ks, train_loader, val_loader)
 
