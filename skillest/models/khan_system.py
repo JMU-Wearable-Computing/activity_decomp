@@ -1,6 +1,8 @@
+from matplotlib import use
 import numpy as np
 import torch
 from sklearn.svm import SVC, LinearSVC
+from sklearn.ensemble import RandomForestClassifier
 from torchvision.datasets import MNIST
 import scipy.stats
 
@@ -35,16 +37,16 @@ class KhanSystem(pl.LightningModule):
                  low_level_classifier=SVC,
                  low_level_classifier_kwargs={
                      "gamma": "auto", "C": 1.0, "cache_size": 2000},
-                 descretizer=SymbolicAggregateApproximation):
+                 descretizer=SymbolicAggregateApproximation, 
+                 use_decision_func: bool = False):
         super().__init__()
         self.save_hyperparameters()
 
         self.high_level_model = high_level_model(**high_level_model_kwargs)
         self.low_level_classifier = low_level_classifier(
             **low_level_classifier_kwargs)
-        # If model is SVC, should we use the decision function instead of prob?
-        self.use_probability_function_for_svm = ("probability" in low_level_classifier_kwargs
-                                                 and low_level_classifier_kwargs["probability"] == True)
+
+        self.use_decision_func = use_decision_func
 
         assert "n_segments" in descretizer_kwargs, "missing n_paa_segments in descretizer_kwargs."
 
@@ -95,11 +97,14 @@ class KhanSystem(pl.LightningModule):
         sorted = np.sort(x_t, axis=3)
         ecdf_features = sorted[..., quantiles.astype(np.int32)]
 
+        # To find entropy we must construct a histogram over our
+        # timesteps. We use 10 bins
         entropy = np.zeros([B, n_seg, C, 1])
         for b in range(B):
             for s in range(n_seg):
                 for c in range(C):
-                    _, counts = np.unique(x_t[b, s, c, :], return_counts=True)
+                    hist, _ = np.histogram(x_t[b, s, c, :], bins=10)
+                    _, counts = np.unique(hist, return_counts=True)
                     entropy[b, s, c] = scipy.stats.entropy(counts)
 
         energy = np.expand_dims(
@@ -135,9 +140,9 @@ class KhanSystem(pl.LightningModule):
         assert np.count_nonzero(
             np.isnan(x_features)) == 0, "Nans in x_features"
 
-        print("Starting low level svm")
+        print("Starting low level classifier")
         self.low_level_classifier.fit(x_features, low_level_labels)
-        if self.use_probability_function_for_svm:
+        if not self.use_decision_func:
             confidence_scores = self.low_level_classifier.predict_proba(
                 x_features)
         else:
@@ -149,28 +154,71 @@ class KhanSystem(pl.LightningModule):
         confidence_scores_t = confidence_scores.transpose([0, 2, 1])
 
         # Find the statisical features per sample
-        mean = np.mean(confidence_scores, axis=2)
-        std = np.std(confidence_scores, axis=2)
-        var = np.var(confidence_scores, axis=2)
-        median = np.median(confidence_scores, axis=2)
+        mean = np.mean(confidence_scores_t, axis=2)
+        std = np.std(confidence_scores_t, axis=2)
+        var = np.var(confidence_scores_t, axis=2)
+        median = np.median(confidence_scores_t, axis=2)
         # statistic: [B, C * alphabet_size]
         high_level_features = np.concatenate([mean, std, var, median], axis=1)
         # features: [B, C * alphabet_size * 4]
 
-        print("Starting high level svm")
+        print("Starting high level classifier")
         self.high_level_model.fit(high_level_features, skill_labels)
 
         accuracy = torch.tensor(self.high_level_model.score(
             high_level_features, skill_labels))
+        print(f"train acc: {accuracy}")
         return {"loss": torch.tensor(0), "train_accuracy": accuracy}
 
     def training_step_end(self, outs):
         self.log("train_accuracy", outs["train_accuracy"])
 
     def validation_step(self, batch, batch_idx):
-        x, y = batch
-        x = x.view(x.shape[0], -1)
-        accuracy = torch.tensor(self.svm.score(x, y))
+        x, skill_labels = batch
+        B, T, C = x.shape
+
+        # x: (B, T, C)
+        low_level_labels = self.descretizer.transform(x)
+        _, n_segments, _ = low_level_labels.shape
+        low_level_labels = low_level_labels.reshape(B * n_segments * C)
+        # low_level_labels: (B * n_segments * C)
+        x_seg = self.segment_data(x, n_segments)
+        # (B, n_segments, (T + pad) / n_segments, C)
+        x_features = self.gen_low_level_features(x_seg)
+        # (B, n_segments, C, # of features)
+        x_features = x_features.reshape([B * n_segments * C, -1])
+        # (B * n_segments * C, # of features)
+
+        assert np.count_nonzero(
+            np.isnan(x_features)) == 0, "Nans in x_features"
+
+        print("Starting low level classifier")
+        if not self.use_decision_func:
+            confidence_scores = self.low_level_classifier.predict_proba(
+                x_features)
+        else:
+            confidence_scores = self.low_level_classifier.decision_function(
+                x_features)
+        # x: (B * n_segments * C, alphabet_size)
+        confidence_scores = confidence_scores.reshape([B, n_segments, -1])
+        # x: (B, n_segments, C * alphabet_size)
+        confidence_scores_t = confidence_scores.transpose([0, 2, 1])
+
+        # Find the statisical features per sample
+        mean = np.mean(confidence_scores_t, axis=2)
+        std = np.std(confidence_scores_t, axis=2)
+        var = np.var(confidence_scores_t, axis=2)
+        median = np.median(confidence_scores_t, axis=2)
+        # statistic: [B, C * alphabet_size]
+        high_level_features = np.concatenate([mean, std, var, median], axis=1)
+        # features: [B, C * alphabet_size * 4]
+
+        print("Starting high level classifier")
+
+        accuracy = torch.tensor(self.high_level_model.score(
+            high_level_features, skill_labels))
+        print(f"val acc: {accuracy}")
+
         return {"loss": torch.tensor(0), "accuracy": accuracy}
 
     def validation_step_end(self, outs):
@@ -185,28 +233,33 @@ if __name__ == "__main__":
     # ]
     # dl = ActitrackerDL(batch_size=10000, num_batches=1,
     #                    num_workers=8, return_activities=True, transformations=transformations)
-    dl = UIPRMDDataloader(batch_size=-1)
+    dl = UIPRMDDataloader(batch_size=-1, num_ep_in_train=6, num_ep_in_val=2, num_ep_in_test=2)
     dl.setup("fit")
     train_loader = dl.train_dataloader()
     val_loader = dl.val_dataloader()
 
     sax_params = {"n_segments": 20, "alphabet_size_avg": 5, "scale": True}
-    high_level_model_kwargs = {"max_iter": 2000}
-    low_level_classifier_kwargs = {"max_iter": 2000}
+    high_level_model_kwargs = {}
+    low_level_classifier_kwargs = {}
 
     ks = KhanSystem(sax_params, 
-                    high_level_model=LinearSVC,
-                    low_level_classifier=LinearSVC,
+                    high_level_model=RandomForestClassifier,
+                    low_level_classifier=RandomForestClassifier,
                     high_level_model_kwargs=high_level_model_kwargs,
                     low_level_classifier_kwargs=low_level_classifier_kwargs)
 
-    # tb_logger = pl_loggers.TensorBoardLogger("logs/")
-    # wandb_logger = pl_loggers.WandbLogger(  # name="svm_test",
-    #     project="test",
-    #     entity="jmu-wearable-computing",
-    #     save_dir="logs/",
-    #     log_model=True)
-    # wandb_logger.watch(svm)
+    tb_logger = pl_loggers.TensorBoardLogger("logs/")
+    wandb_logger = pl_loggers.WandbLogger(  # name="svm_test",
+        project="test",
+        entity="jmu-wearable-computing",
+        save_dir="logs/",
+        log_model=True)
+    wandb_logger.experiment.config["type"] = "khan_system"
+    for hparam, v in dl.hparams.items():
+        print(f"{hparam}: {v}")
+        wandb_logger.experiment.config[hparam] = v if v is not None else "None"
+
+    # wandb_logger.watch(ks)
     # run = wandb_logger.experiment
     # model_artifact = run.Artifact("svm", type="svm")
     # model_artifact.add_dir("logs/")
@@ -215,9 +268,9 @@ if __name__ == "__main__":
     trainer = pl.Trainer(max_steps=1,
                          val_check_interval=1.0,
                          limit_train_batches=1,
-                         limit_val_batches=0.0,
+                         limit_val_batches=1.0,
                          num_sanity_val_steps=0,
-                        #  logger=[tb_logger, wandb_logger],
+                         logger=[tb_logger, wandb_logger],
                          log_every_n_steps=1)
     trainer.fit(ks, train_loader, val_loader)
 
