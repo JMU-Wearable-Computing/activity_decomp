@@ -7,7 +7,11 @@ import torch
 
 from pytorch_lightning import LightningDataModule
 
+# DO NOT CHANGE RANDOM SEED ONCE IT IS SELECTED
+# This would lead to different builds of the dataset
+# splits every time
 RANDOM_SEED = 7
+###############################################
 NUM_SUBJECTS = 10
 NUM_MOVEMENTS = 10
 NUM_EPISODES = 10
@@ -18,10 +22,11 @@ INCORRECT = 0
 def get_data():
     # If this file has been updated more recently than the data file
     # recompute the data file
-    this_file_last_mod = os.path.getmtime("skillest/dataloaders/ui_prmd_dl.py")
-    data_pkl_last_mod = os.path.getmtime("UI-PRMD/kinect_data.pkl")
-    if this_file_last_mod < data_pkl_last_mod:
-        return pd.read_pickle("UI-PRMD/kinect_data.pkl")
+    if os.path.exists("UI-PRMD/kinect_data.pkl"):
+        this_file_last_mod = os.path.getmtime("skillest/dataloaders/ui_prmd_dl.py")
+        data_pkl_last_mod = os.path.getmtime("UI-PRMD/kinect_data.pkl")
+        if this_file_last_mod < data_pkl_last_mod:
+            return pd.read_pickle("UI-PRMD/kinect_data.pkl")
 
     def load_data(angle_dir, positions_dir, data_dict, label):
 
@@ -78,9 +83,9 @@ def get_data():
 class UIPRMDDataloader(LightningDataModule):
 
     def __init__(self, batch_size: int,
-                 num_sub_in_train: int = 6,
-                 num_sub_in_val: int = 2,
-                 num_sub_in_test: int = 2,
+                 num_sub_in_train: int = None,
+                 num_sub_in_val: int = None,
+                 num_sub_in_test: int = None,
                  num_mov_in_train: int = None,
                  num_mov_in_val: int = None,
                  num_mov_in_test: int = None,
@@ -90,6 +95,7 @@ class UIPRMDDataloader(LightningDataModule):
         super().__init__()
         self.data = get_data()
         self.batch_size = batch_size
+        self.rng = np.random.RandomState(RANDOM_SEED)
 
         self.sub_train, self.sub_val, self.sub_test = self.get_choice_sample(
             NUM_SUBJECTS, num_sub_in_train, num_sub_in_val, num_sub_in_test)
@@ -99,6 +105,7 @@ class UIPRMDDataloader(LightningDataModule):
 
         self.ep_train, self.ep_val, self.ep_test = self.get_choice_sample(
             NUM_EPISODES, num_ep_in_train, num_ep_in_val, num_ep_in_test)
+        self.save_hyperparameters()
 
     def get_choice_sample(self, total, train, val, test):
         sampled_train = np.arange(1, total + 1)
@@ -106,14 +113,14 @@ class UIPRMDDataloader(LightningDataModule):
         sampled_test = np.arange(1, total + 1)
         # use all values unless we want to sample
         if (train is not None) and (val is not None) and (test is not None):
-            sampled_train = np.random.choice(sampled_train, train, replace=False)
+            sampled_train = self.rng.choice(sampled_train, train, replace=False)
 
             # Remove already sampeld values
             sampled_val_choices = np.delete(sampled_val, sampled_train - 1)
-            sampled_val = np.random.choice(sampled_val_choices, val, replace=False)
+            sampled_val = self.rng.choice(sampled_val_choices, val, replace=False)
 
             sampled_test_choices = np.delete(sampled_test, np.concatenate([sampled_train, sampled_val]) - 1)
-            sampled_test = np.random.choice(sampled_test_choices, test, replace=False)
+            sampled_test = self.rng.choice(sampled_test_choices, test, replace=False)
 
         return sampled_train, sampled_val, sampled_test
 
@@ -162,16 +169,17 @@ class UIPRMDDataloader(LightningDataModule):
 
 if __name__ == "__main__":
 
-    dl = UIPRMDDataloader(batch_size=-1)
-    dl.setup("fit")
-    dt = iter(dl.train_dataloader())
-    dv = iter(dl.val_dataloader())
-    from datetime import datetime
-    start = datetime.now()
-    for tbatch, vbatch in zip(dt, dv):
-        print(f"{tbatch[0].shape}")
-        print(f"{vbatch[0].shape}")
+    dl = UIPRMDDataloader(batch_size=-1, num_ep_in_train=6, num_ep_in_val=2, num_ep_in_test=2)
+    print(dl.hparams)
+    # dl.setup("fit")
+    # dt = iter(dl.train_dataloader())
+    # dv = iter(dl.val_dataloader())
+    # from datetime import datetime
+    # start = datetime.now()
+    # for tbatch, vbatch in zip(dt, dv):
+    #     print(f"{tbatch[0].shape}")
+    #     print(f"{vbatch[0].shape}")
 
-    end = datetime.now()
-    dl.teardown("fit")
-    print(f"Duration: {end - start}")
+    # end = datetime.now()
+    # dl.teardown("fit")
+    # print(f"Duration: {end - start}")
