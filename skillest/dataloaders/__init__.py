@@ -8,6 +8,7 @@ ACTITRCKER_ACTIVITIES_TO_IDX = {a: i for i, a in enumerate(ACTITRCKER_ACTIVITIES
 from skillest.dataloaders.actitracker_dl import ActitrackerDL
 from skillest.dataloaders.ui_prmd_dl import UIPRMDDataloader
 from skillest.dataloaders.imu_dl import IMUDataModule, IMUDataset
+from skillest.dataloaders.hdf5_dl import H5DataModule
 
 from skillest.dataloaders.transformations import (channel_shuffle_transform_vectorized, force_to_shape, 
                                                   get_cubic_spline_interpolation,
