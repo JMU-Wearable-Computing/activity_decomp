@@ -186,3 +186,58 @@ def time_warp_transform_low_cost(X, sigma=0.2, num_knots=4, num_splines=150):
     for i, random_index in enumerate(random_indices):
         X_transformed[i // X.shape[2], :, i % X.shape[2]] = np.interp(time_stamps, distorted_time_stamps_all[random_index], X[i // X.shape[2], :, i % X.shape[2]])
     return X_transformed
+
+    ###################################### Start of Riley White's code
+
+from random import randrange
+import math
+
+def sample_windows(sample: np.array, samples_per_window: int, axis=0) -> np.array:
+    """Samples `count` random windows from the given IMU sample. 
+
+    Args:
+        sample (np.array): Data to generate windows from.
+
+    Returns:
+        np.array: Windowed data.
+    """
+    window_starts = randrange(sample.shape[0] - samples_per_window)
+    window_ends = window_starts + samples_per_window
+    slices = [slice(None), ] * sample.ndim
+    slices[axis] = slice(window_starts, window_ends)
+    window = sample[tuple(slices)]
+    return window
+
+def pad_to_shape(x: np.array, target_shape: tuple) -> np.array:
+    """Pad a numpy array to a given shape.
+    https://stackoverflow.com/questions/56357039/numpy-zero-padding-to-match-a-certain-shape
+
+    Args:
+        target_shape (np.array): Array to pad
+        x (tuple): Shape to pad to
+
+    Returns:
+        np.array: Padded array
+    """
+    padding_list = []
+    for x_dim, target_dim in zip(x.shape, target_shape):
+        if target_dim == -1:
+            padding_list.append((0, 0))
+            continue
+
+        pad_value = (target_dim - x_dim)
+        if pad_value > 0:
+            pad_tuple = (0, pad_value)
+            padding_list.append(pad_tuple)
+    
+    return np.pad(x, tuple(padding_list), mode='constant')
+
+def truncate_to_shape(x: np.array, target_shape: tuple) -> np.array:
+    slices = [slice(target_dim if x_dim > target_dim and target_dim > 0 else None) 
+              for x_dim, target_dim in zip(x.shape, target_shape)]
+    return x[tuple(slices)]
+
+def force_to_shape(x: np.array, target_shape: tuple):
+    x = truncate_to_shape(x, target_shape=target_shape)
+    x = pad_to_shape(x, target_shape=target_shape)
+    return x
