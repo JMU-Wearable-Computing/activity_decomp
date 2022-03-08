@@ -4,6 +4,7 @@ from skillest.dataloaders import H5DataModule
 from skillest.dataloaders.hdf5_dl import H5Dataset
 from skillest.dataloaders import force_to_shape, sample_windows
 import h5py
+import os
 
 TEST_FILE1_NAME = "test1.h5"
 TEST_FILE2_NAME = "test2.h5"
@@ -31,6 +32,11 @@ def hdf5_setup():
     g.create_dataset(DATASET_NAME2, [111, 127])
     g.create_dataset(DATASET_NAME3, [99, 127])
     f.close()
+
+    yield
+    os.remove(TEST_FILE1_NAME)
+    os.remove(TEST_FILE2_NAME)
+
 
 
 def test_file1_dataset():
