@@ -119,11 +119,19 @@ class KhanSystem(pl.LightningModule):
         return np.concatenate([ecdf_features, energy, entropy, mean, std], axis=3)
 
     def training_step(self, batch, batch_idx):
+        accuracy = self.model_pass(batch, training=True)
+        print(f"train acc: {accuracy}")
+        return {"loss": torch.tensor(0), "train_accuracy": accuracy}
+
+    def model_pass(self, batch, training=False):
         x, skill_labels = batch
         B, T, C = x.shape
 
         # x: (B, T, C)
-        low_level_labels = self.descretizer.fit_transform(x)
+        if training:
+            low_level_labels = self.descretizer.fit(x)
+        low_level_labels = self.descretizer.transform(x)
+
         _, n_segments, _ = low_level_labels.shape
         low_level_labels = low_level_labels.reshape(B * n_segments * C)
         # low_level_labels: (B * n_segments * C)
@@ -140,8 +148,10 @@ class KhanSystem(pl.LightningModule):
         assert np.count_nonzero(
             np.isnan(x_features)) == 0, "Nans in x_features"
 
-        print("Starting low level classifier")
-        self.low_level_classifier.fit(x_features, low_level_labels)
+        if training:
+            print("Starting low level classifier")
+            self.low_level_classifier.fit(x_features, low_level_labels)
+
         if not self.use_decision_func:
             confidence_scores = self.low_level_classifier.predict_proba(
                 x_features)
@@ -162,63 +172,20 @@ class KhanSystem(pl.LightningModule):
         high_level_features = np.concatenate([mean, std, var, median], axis=1)
         # features: [B, C * alphabet_size * 4]
 
-        print("Starting high level classifier")
-        self.high_level_model.fit(high_level_features, skill_labels)
+        if training:
+            print("Starting high level classifier")
+            self.high_level_model.fit(high_level_features, skill_labels)
 
         accuracy = torch.tensor(self.high_level_model.score(
             high_level_features, skill_labels))
-        print(f"train acc: {accuracy}")
-        return {"loss": torch.tensor(0), "train_accuracy": accuracy}
+        return accuracy
 
     def training_step_end(self, outs):
         self.log("train_accuracy", outs["train_accuracy"])
 
     def validation_step(self, batch, batch_idx):
-        x, skill_labels = batch
-        B, T, C = x.shape
-
-        # x: (B, T, C)
-        low_level_labels = self.descretizer.transform(x)
-        _, n_segments, _ = low_level_labels.shape
-        low_level_labels = low_level_labels.reshape(B * n_segments * C)
-        # low_level_labels: (B * n_segments * C)
-        x_seg = self.segment_data(x, n_segments)
-        # (B, n_segments, (T + pad) / n_segments, C)
-        x_features = self.gen_low_level_features(x_seg)
-        # (B, n_segments, C, # of features)
-        x_features = x_features.reshape([B * n_segments * C, -1])
-        # (B * n_segments * C, # of features)
-
-        assert np.count_nonzero(
-            np.isnan(x_features)) == 0, "Nans in x_features"
-
-        print("Starting low level classifier")
-        if not self.use_decision_func:
-            confidence_scores = self.low_level_classifier.predict_proba(
-                x_features)
-        else:
-            confidence_scores = self.low_level_classifier.decision_function(
-                x_features)
-        # x: (B * n_segments * C, alphabet_size)
-        confidence_scores = confidence_scores.reshape([B, n_segments, -1])
-        # x: (B, n_segments, C * alphabet_size)
-        confidence_scores_t = confidence_scores.transpose([0, 2, 1])
-
-        # Find the statisical features per sample
-        mean = np.mean(confidence_scores_t, axis=2)
-        std = np.std(confidence_scores_t, axis=2)
-        var = np.var(confidence_scores_t, axis=2)
-        median = np.median(confidence_scores_t, axis=2)
-        # statistic: [B, C * alphabet_size]
-        high_level_features = np.concatenate([mean, std, var, median], axis=1)
-        # features: [B, C * alphabet_size * 4]
-
-        print("Starting high level classifier")
-
-        accuracy = torch.tensor(self.high_level_model.score(
-            high_level_features, skill_labels))
+        accuracy = self.model_pass(batch, training=False)
         print(f"val acc: {accuracy}")
-
         return {"loss": torch.tensor(0), "accuracy": accuracy}
 
     def validation_step_end(self, outs):
