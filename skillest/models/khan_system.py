@@ -12,7 +12,7 @@ from pytorch_lightning import loggers as pl_loggers
 import os
 import wandb
 
-from skillest.dataloaders import ActitrackerDL, UIPRMDDataloader
+from skillest.dataloaders import ActitrackerDL, UIPRMDDataloader, UIPRMDSingleDataloader
 from tslearn.piecewise import SymbolicAggregateApproximation
 
 from skillest.dataloaders.transformations import (channel_shuffle_transform_vectorized, 
@@ -25,6 +25,7 @@ from skillest.dataloaders.transformations import (channel_shuffle_transform_vect
                                                   time_segment_permutation_transform_improved,
                                                   time_warp_transform_improved,
                                                   time_warp_transform_low_cost)
+from skillest.utils import SubjectMovementLogger
 
 
 class KhanSystem(pl.LightningModule):
@@ -38,9 +39,11 @@ class KhanSystem(pl.LightningModule):
                  low_level_classifier_kwargs={
                      "gamma": "auto", "C": 1.0, "cache_size": 2000},
                  descretizer=SymbolicAggregateApproximation, 
-                 use_decision_func: bool = False):
+                 use_decision_func: bool = False, 
+                 logger=None):
         super().__init__()
         self.save_hyperparameters()
+        self.logger = logger
 
         self.high_level_model = high_level_model(**high_level_model_kwargs)
         self.low_level_classifier = low_level_classifier(
@@ -181,7 +184,10 @@ class KhanSystem(pl.LightningModule):
         return accuracy
 
     def training_step_end(self, outs):
-        self.log("train_accuracy", outs["train_accuracy"])
+        if self.logger:
+            self.logger.log(outs["train_accuracy"], mode="train")
+        else:
+            self.log("train_accuracy", outs["train_accuracy"])
 
     def validation_step(self, batch, batch_idx):
         accuracy = self.model_pass(batch, training=False)
@@ -189,7 +195,11 @@ class KhanSystem(pl.LightningModule):
         return {"loss": torch.tensor(0), "accuracy": accuracy}
 
     def validation_step_end(self, outs):
-        self.log("val_accuracy", outs["accuracy"])
+        if self.logger:
+            self.logger.log(outs["accuracy"], mode="val")
+        else:
+            self.log("val_accuracy", outs["accuracy"])
+        
 
     def configure_optimizers(self):
         return None
@@ -200,24 +210,18 @@ if __name__ == "__main__":
     # ]
     # dl = ActitrackerDL(batch_size=10000, num_batches=1,
     #                    num_workers=8, return_activities=True, transformations=transformations)
-    dl = UIPRMDDataloader(batch_size=-1, num_ep_in_train=6, num_ep_in_val=2, num_ep_in_test=2)
-    dl.setup("fit")
-    train_loader = dl.train_dataloader()
-    val_loader = dl.val_dataloader()
+    # dl = UIPRMDDataloader(batch_size=-1, num_ep_in_train=6, num_ep_in_val=2, num_ep_in_test=2)
+    dl = UIPRMDSingleDataloader(batch_size=-1, num_ep_in_train=6, num_ep_in_val=2, num_ep_in_test=2)
+    # train_loader = dl.train_dataloader()
+    # val_loader = dl.val_dataloader()
 
     sax_params = {"n_segments": 20, "alphabet_size_avg": 5, "scale": True}
     high_level_model_kwargs = {}
     low_level_classifier_kwargs = {}
 
-    ks = KhanSystem(sax_params, 
-                    high_level_model=RandomForestClassifier,
-                    low_level_classifier=RandomForestClassifier,
-                    high_level_model_kwargs=high_level_model_kwargs,
-                    low_level_classifier_kwargs=low_level_classifier_kwargs)
-
     tb_logger = pl_loggers.TensorBoardLogger("logs/")
     wandb_logger = pl_loggers.WandbLogger(  # name="svm_test",
-        project="test",
+        project="UI-PRMD",
         entity="jmu-wearable-computing",
         save_dir="logs/",
         log_model=True)
@@ -226,20 +230,46 @@ if __name__ == "__main__":
         print(f"{hparam}: {v}")
         wandb_logger.experiment.config[hparam] = v if v is not None else "None"
 
+    submov_logger = SubjectMovementLogger()
+    ks = KhanSystem(sax_params, 
+                    high_level_model=RandomForestClassifier,
+                    low_level_classifier=RandomForestClassifier,
+                    high_level_model_kwargs=high_level_model_kwargs,
+                    low_level_classifier_kwargs=low_level_classifier_kwargs,
+                    logger=submov_logger)
+
     # wandb_logger.watch(ks)
     # run = wandb_logger.experiment
     # model_artifact = run.Artifact("svm", type="svm")
     # model_artifact.add_dir("logs/")
     # run.log_artifact(model_artifact)
 
-    trainer = pl.Trainer(max_steps=1,
-                         val_check_interval=1.0,
-                         limit_train_batches=1,
-                         limit_val_batches=1.0,
-                         num_sanity_val_steps=0,
-                         logger=[tb_logger, wandb_logger],
-                         log_every_n_steps=1)
-    trainer.fit(ks, train_loader, val_loader)
+    # trainer = pl.Trainer(max_steps=1,
+    #                      val_check_interval=1.0,
+    #                      limit_train_batches=1,
+    #                      limit_val_batches=1.0,
+    #                      num_sanity_val_steps=0,
+    #                     #  logger=[tb_logger, wandb_logger],
+    #                      log_every_n_steps=1)
+    # trainer.fit(ks, train_loader, val_loader)
+    for i in range(1, 11):
+        for j in range(1, 11):
+            print(f"Subject: {i}, Movement: {j} ")
+            wandb_logger._prefix = f"sub{i}_mov{j}"
+            trainer = pl.Trainer(max_steps=1,
+                                val_check_interval=1.0,
+                                limit_train_batches=1,
+                                limit_val_batches=1.0,
+                                num_sanity_val_steps=0,
+                                logger=[tb_logger, wandb_logger],
+                                log_every_n_steps=1)
+            dl.set_subject(subject=i)
+            dl.set_movement(movement=j)
+            submov_logger.set_subject_movement(subject=i, movement=j)
+            train_loader = iter(dl.train_dataloader())
+            val_loader = iter(dl.val_dataloader())
+            trainer.fit(ks, train_loader, val_loader)
+    submov_logger.reduce()
 
     # sax_params = {"n_segments": 20, "alphabet_size_avg": 5, "scale": True}
     # ks = KhanSystem(sax_params)
