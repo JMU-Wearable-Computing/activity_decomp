@@ -1,2 +1,3 @@
 from skillest.utils.get_activity_data_info import get_activity_data_info
 from skillest.utils.visualize_imu import plot_activity
+from skillest.utils.loggers import SubjectMovementLogger
