@@ -20,14 +20,14 @@ class SubjectMovementLogger():
         self.movement = movement
     
     def log(self, acc, mode="train"):
-        if "train" not in self.accuracies.keys():
+        if mode not in self.accuracies.keys():
             self.accuracies[mode] = torch.zeros([self.num_sub, self.num_mov])
 
         self.accuracies[mode][self.subject - 1, self.movement - 1] += acc
     
     def reduce(self):
-        prefix = f"{prefix}_" if prefix else ""
-        for mode, accuracies in self.accuracies:
+        prefix = f"{self.prefix}_" if self.prefix else ""
+        for mode, accuracies in self.accuracies.items():
             subject_table = wandb.Table(columns=self.cols, data=[accuracies.mean(axis=0).tolist()])
             movement_table = wandb.Table(columns=self.cols, data=[accuracies.mean(axis=1).tolist()])
             accuracy_table = wandb.Table(columns=self.cols, data=accuracies.tolist())

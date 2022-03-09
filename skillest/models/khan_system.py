@@ -40,10 +40,10 @@ class KhanSystem(pl.LightningModule):
                      "gamma": "auto", "C": 1.0, "cache_size": 2000},
                  descretizer=SymbolicAggregateApproximation, 
                  use_decision_func: bool = False, 
-                 logger=None):
+                 custom_logger=None):
         super().__init__()
         self.save_hyperparameters()
-        self.logger = logger
+        self.custom_logger = custom_logger
 
         self.high_level_model = high_level_model(**high_level_model_kwargs)
         self.low_level_classifier = low_level_classifier(
@@ -184,8 +184,8 @@ class KhanSystem(pl.LightningModule):
         return accuracy
 
     def training_step_end(self, outs):
-        if self.logger:
-            self.logger.log(outs["train_accuracy"], mode="train")
+        if self.custom_logger:
+            self.custom_logger.log(outs["train_accuracy"], mode="train")
         else:
             self.log("train_accuracy", outs["train_accuracy"])
 
@@ -195,12 +195,11 @@ class KhanSystem(pl.LightningModule):
         return {"loss": torch.tensor(0), "accuracy": accuracy}
 
     def validation_step_end(self, outs):
-        if self.logger:
-            self.logger.log(outs["accuracy"], mode="val")
+        if self.custom_logger:
+            self.custom_logger.log(outs["accuracy"], mode="val")
         else:
             self.log("val_accuracy", outs["accuracy"])
         
-
     def configure_optimizers(self):
         return None
 
@@ -236,7 +235,7 @@ if __name__ == "__main__":
                     low_level_classifier=RandomForestClassifier,
                     high_level_model_kwargs=high_level_model_kwargs,
                     low_level_classifier_kwargs=low_level_classifier_kwargs,
-                    logger=submov_logger)
+                    custom_logger=submov_logger)
 
     # wandb_logger.watch(ks)
     # run = wandb_logger.experiment
