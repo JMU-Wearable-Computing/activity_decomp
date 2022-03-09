@@ -23,7 +23,8 @@ def get_data():
     # If this file has been updated more recently than the data file
     # recompute the data file
     if os.path.exists("UI-PRMD/kinect_data.pkl"):
-        this_file_last_mod = os.path.getmtime("skillest/dataloaders/ui_prmd_dl.py")
+        this_file_last_mod = os.path.getmtime(
+            "skillest/dataloaders/ui_prmd_dl.py")
         data_pkl_last_mod = os.path.getmtime("UI-PRMD/kinect_data.pkl")
         if this_file_last_mod < data_pkl_last_mod:
             return pd.read_pickle("UI-PRMD/kinect_data.pkl")
@@ -113,14 +114,18 @@ class UIPRMDDataloader(LightningDataModule):
         sampled_test = np.arange(1, total + 1)
         # use all values unless we want to sample
         if (train is not None) and (val is not None) and (test is not None):
-            sampled_train = self.rng.choice(sampled_train, train, replace=False)
+            sampled_train = self.rng.choice(
+                sampled_train, train, replace=False)
 
             # Remove already sampeld values
             sampled_val_choices = np.delete(sampled_val, sampled_train - 1)
-            sampled_val = self.rng.choice(sampled_val_choices, val, replace=False)
+            sampled_val = self.rng.choice(
+                sampled_val_choices, val, replace=False)
 
-            sampled_test_choices = np.delete(sampled_test, np.concatenate([sampled_train, sampled_val]) - 1)
-            sampled_test = self.rng.choice(sampled_test_choices, test, replace=False)
+            sampled_test_choices = np.delete(
+                sampled_test, np.concatenate([sampled_train, sampled_val]) - 1)
+            sampled_test = self.rng.choice(
+                sampled_test_choices, test, replace=False)
 
         return sampled_train, sampled_val, sampled_test
 
@@ -167,10 +172,41 @@ class UIPRMDDataloader(LightningDataModule):
         return DataLoader(TensorDataset(values, labels), batch_size=batch_size)
 
 
+class UIPRMDSingleDataloader(UIPRMDDataloader):
+
+    def __init__(self, batch_size: int = -1, 
+                 num_ep_in_train: int = 6,
+                 num_ep_in_val: int = 2,
+                 num_ep_in_test: int = 2):
+        super().__init__(batch_size=batch_size,
+                         num_ep_in_train=num_ep_in_train,
+                         num_ep_in_val=num_ep_in_val, 
+                         num_ep_in_test=num_ep_in_test)
+        self.subject = None
+        self.movement = None
+
+    def set_subject(self, subject: int) -> None:
+        assert 1 <= subject and subject <= 10, f"Invalid subject number {subject}"
+        self.subject = subject
+
+    def set_movement(self, movement: int) -> None:
+        assert 1 <= movement and movement <= 10, f"Invalid activity number {movement}"
+        self.movement = movement
+
+    def sample_data(self, sub, mov, ep):
+        values, labels, movement, subject = super().sample_data(sub, mov, ep)
+        mask = torch.ones_like(labels, dtype=torch.bool)
+        if self.subject:
+            mask &= (subject == self.subject)
+        if self.movement:
+            mask &= (movement == self.movement)
+
+        return values[mask, ...], labels[mask], movement[mask], subject[mask]
+
 if __name__ == "__main__":
 
-    dl = UIPRMDDataloader(batch_size=-1, num_ep_in_train=6, num_ep_in_val=2, num_ep_in_test=2)
-    print(dl.hparams)
+    # dl = UIPRMDDataloader(batch_size=-1, num_ep_in_train=6, num_ep_in_val=2, num_ep_in_test=2)
+    # print(dl.hparams)
     # dl.setup("fit")
     # dt = iter(dl.train_dataloader())
     # dv = iter(dl.val_dataloader())
@@ -183,3 +219,15 @@ if __name__ == "__main__":
     # end = datetime.now()
     # dl.teardown("fit")
     # print(f"Duration: {end - start}")
+
+    dl = UIPRMDSingleDataloader(batch_size=-1, num_ep_in_train=6, num_ep_in_val=2, num_ep_in_test=2)
+    for i in range(1, 11):
+        for j in range(1, 11):
+            dl.set_subject(subject=i)
+            dl.set_movement(movement=j)
+            dt = iter(dl.train_dataloader())
+            dv = iter(dl.val_dataloader())
+            for tbatch, vbatch in zip(dt, dv):
+                print(f"{tbatch[0].shape}")
+            print(f"{vbatch[1].shape}")
+
