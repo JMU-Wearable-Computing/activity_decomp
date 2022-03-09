@@ -139,7 +139,7 @@ class UIPRMDDataloader(LightningDataModule):
         values = np.concatenate([angles, positions], axis=-1)
 
         N = values.shape[0]
-        mask = np.random.permutation(N)
+        mask = self.rng.permutation(N)
         values = torch.tensor(values[mask])
         labels = torch.tensor(sampled_data["label"].values[mask])
         movement = torch.tensor(sampled_data["movement"].values[mask])
