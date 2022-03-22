@@ -18,6 +18,11 @@ NUM_EPISODES = 10
 CORRECT = 1
 INCORRECT = 0
 
+POINT_LABEL_ORDER = ["waist", "spine", "chest", "neck", "head", "head_tip", "left_collar",
+                     "left_upper_arm", "left_forearm", "left_hand", "right_collar", "right_upper_arm",
+                     "right_forearm", "right_hand", "left_upper_leg", "left_lower_leg", "left_foot",
+                     "left_leg_toes", "right_upper_leg", "right_lower_leg", "right_foot", "right_leg_toes"]
+
 
 def get_data():
     # If this file has been updated more recently than the data file
@@ -92,7 +97,8 @@ class UIPRMDDataloader(LightningDataModule):
                  num_mov_in_test: int = None,
                  num_ep_in_train: int = None,
                  num_ep_in_val: int = None,
-                 num_ep_in_test: int = None):
+                 num_ep_in_test: int = None,
+                 points_to_use=None):
         super().__init__()
         self.data = get_data()
         self.batch_size = batch_size
@@ -106,6 +112,14 @@ class UIPRMDDataloader(LightningDataModule):
 
         self.ep_train, self.ep_val, self.ep_test = self.get_choice_sample(
             NUM_EPISODES, num_ep_in_train, num_ep_in_val, num_ep_in_test)
+
+        self.points_to_use = points_to_use
+        if points_to_use is not None:
+            self.point_mask = np.array([[True,] * 3 if point in points_to_use else [False, ] * 3
+                                        for point in POINT_LABEL_ORDER]).reshape(-1)
+        else:
+            self.point_mask = np.ones(len(POINT_LABEL_ORDER) * 3, dtype=bool)
+        
         self.save_hyperparameters()
 
     def get_choice_sample(self, total, train, val, test):
@@ -134,8 +148,8 @@ class UIPRMDDataloader(LightningDataModule):
                       & self.data["movement"].isin(mov)
                       & self.data["episode"].isin(ep))
         sampled_data = self.data[expression]
-        angles = np.array([a for a in sampled_data["angles"].values])
-        positions = np.array([a for a in sampled_data["positions"].values])
+        angles = np.array([a for a in sampled_data["angles"].values])[..., self.point_mask]
+        positions = np.array([a for a in sampled_data["positions"].values])[..., self.point_mask]
         values = np.concatenate([angles, positions], axis=-1)
 
         N = values.shape[0]

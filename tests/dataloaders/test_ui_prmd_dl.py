@@ -6,6 +6,15 @@ import pytest
 single_dl = UIPRMDSingleDataloader(batch_size=-1, num_ep_in_train=6, num_ep_in_val=2, num_ep_in_test=2)
 dl = UIPRMDSingleDataloader(batch_size=-1, num_ep_in_train=6, num_ep_in_val=2, num_ep_in_test=2)
 
+def test_point_mask():
+    single_dl = UIPRMDSingleDataloader(batch_size=-1, num_ep_in_train=6, num_ep_in_val=2, num_ep_in_test=2, points_to_use=["waist", "head_tip"])
+    tvalues, tlabels, tmovement, tsubject = single_dl.sample_data(single_dl.sub_train, single_dl.mov_train, single_dl.ep_train)
+    vvalues, vlabels, vmovement, vsubject = single_dl.sample_data(single_dl.sub_val, single_dl.mov_val, single_dl.ep_val)
+
+    assert tvalues.shape[-1] == 12
+    assert vvalues.shape[-1] == 12
+
+
 def test_seed():
     dl2 = UIPRMDSingleDataloader(batch_size=-1, num_ep_in_train=6, num_ep_in_val=2, num_ep_in_test=2)
     tvalues, tlabels, tmovement, tsubject = dl.sample_data(dl.sub_train, dl.mov_train, dl.ep_train)
