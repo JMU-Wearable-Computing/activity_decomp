@@ -28,11 +28,7 @@ def get_data():
     # If this file has been updated more recently than the data file
     # recompute the data file
     if os.path.exists("UI-PRMD/kinect_data.pkl"):
-        this_file_last_mod = os.path.getmtime(
-            "skillest/dataloaders/ui_prmd_dl.py")
-        data_pkl_last_mod = os.path.getmtime("UI-PRMD/kinect_data.pkl")
-        if this_file_last_mod < data_pkl_last_mod:
-            return pd.read_pickle("UI-PRMD/kinect_data.pkl")
+        return pd.read_pickle("UI-PRMD/kinect_data.pkl")
 
     def load_data(angle_dir, positions_dir, data_dict, label):
 
