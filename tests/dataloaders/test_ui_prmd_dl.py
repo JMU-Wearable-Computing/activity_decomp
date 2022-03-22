@@ -44,5 +44,8 @@ def test_correct_separation():
             assert torch.equal(torch.sort(tl, axis=0)[0], torch.sort(tlabels[tmask, ...], axis=0)[0])
             assert torch.equal(torch.sort(vl, axis=0)[0], torch.sort(vlabels[vmask, ...], axis=0)[0])
 
+            assert torch.equal(torch.mean(tl.float(), axis=0), torch.tensor(0.5))
+            assert torch.equal(torch.mean(vl.float(), axis=0), torch.tensor(0.5))
+
 
 

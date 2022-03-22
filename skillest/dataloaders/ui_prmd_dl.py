@@ -174,14 +174,8 @@ class UIPRMDDataloader(LightningDataModule):
 
 class UIPRMDSingleDataloader(UIPRMDDataloader):
 
-    def __init__(self, batch_size: int = -1, 
-                 num_ep_in_train: int = 6,
-                 num_ep_in_val: int = 2,
-                 num_ep_in_test: int = 2):
-        super().__init__(batch_size=batch_size,
-                         num_ep_in_train=num_ep_in_train,
-                         num_ep_in_val=num_ep_in_val, 
-                         num_ep_in_test=num_ep_in_test)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.subject = None
         self.movement = None
 

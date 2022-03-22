@@ -28,9 +28,12 @@ class SubjectMovementLogger():
     def reduce(self):
         prefix = f"{self.prefix}_" if self.prefix else ""
         for mode, accuracies in self.accuracies.items():
-            subject_table = wandb.Table(columns=self.cols, data=[accuracies.mean(axis=0).tolist()])
-            movement_table = wandb.Table(columns=self.cols, data=[accuracies.mean(axis=1).tolist()])
+
+            if self.num_sub > 1 and self.num_mov > 1:
+                subject_table = wandb.Table(columns=self.cols, data=[accuracies.mean(axis=0).tolist()])
+                movement_table = wandb.Table(columns=self.cols, data=[accuracies.mean(axis=1).tolist()])
+                wandb.log({f"{prefix}{mode}_subject_accuracies": subject_table, 
+                        f"{prefix}{mode}_movement_accuracies": movement_table})
+
             accuracy_table = wandb.Table(columns=self.cols, data=accuracies.tolist())
-            wandb.log({f"{prefix}{mode}_subject_accuracies": subject_table, 
-                    f"{prefix}{mode}_movement_accuracies": movement_table, 
-                    f"{prefix}{mode}_accuracies": accuracy_table})
+            wandb.log({f"{prefix}{mode}_accuracies": accuracy_table})
