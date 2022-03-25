@@ -130,3 +130,8 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+default_UI-PRMD/
+lightning_logs/
+logs/
+default_test/
