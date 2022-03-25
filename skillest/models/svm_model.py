@@ -23,11 +23,12 @@ from skillest.dataloaders.transformations import (channel_shuffle_transform_vect
 
 class SVM(pl.LightningModule):
 
-    def __init__(self, gamma="auto", C=1.0):
+    def __init__(self, custom_logger=None, **kwargs):
         super().__init__()
         self.save_hyperparameters()
-        self.svm = SVC(gamma=gamma, C=C, probability=True)
+        self.svm = SVC(**kwargs)
         self.type = "svm"
+        self.custom_logger = custom_logger
 
     def forward(self, x):
         return self.svm.predict(x)
@@ -43,7 +44,10 @@ class SVM(pl.LightningModule):
         return {"loss": torch.tensor(0), "train_accuracy": accuracy}
     
     def training_step_end(self, outs):
-        self.log("train_accuracy", outs["train_accuracy"])
+        if self.custom_logger:
+            self.custom_logger.log(outs["train_accuracy"], mode="train")
+        else:
+            self.log("train_accuracy", outs["train_accuracy"])
 
     def validation_step(self, batch, batch_idx):
         x, y = batch
@@ -52,7 +56,10 @@ class SVM(pl.LightningModule):
         return {"loss": torch.tensor(0), "accuracy": accuracy}
     
     def validation_step_end(self, outs):
-        self.log("val_accuracy", outs["accuracy"])
+        if self.custom_logger:
+            self.custom_logger.log(outs["accuracy"], mode="val")
+        else:
+            self.log("val_accuracy", outs["accuracy"])
 
     def configure_optimizers(self):
         return None
