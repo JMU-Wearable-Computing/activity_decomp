@@ -1,6 +1,8 @@
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import RidgeClassifier
 import pytorch_lightning as pl
 from pytorch_lightning import loggers as pl_loggers
+import itertools
 
 from skillest.dataloaders import UIPRMDSingleDataloader
 from skillest.models import KhanSystem
@@ -13,7 +15,7 @@ dl = UIPRMDSingleDataloader(batch_size=-1, num_ep_in_train=6, num_ep_in_val=2, n
                                            "left_lower_leg", "left_foot"])
 
 sax_params = {"n_segments": 20, "alphabet_size_avg": 5, "scale": True}
-high_level_model_kwargs = {}
+high_level_model_kwargs = {"alpha": 20}
 low_level_classifier_kwargs = {}
 
 tb_logger = pl_loggers.TensorBoardLogger("logs/")
@@ -29,7 +31,7 @@ for hparam, v in dl.hparams.items():
 
 submov_logger = SubjectMovementLogger()
 ks = KhanSystem(sax_params, 
-                high_level_model=RandomForestClassifier,
+                high_level_model=RidgeClassifier,
                 low_level_classifier=RandomForestClassifier,
                 high_level_model_kwargs=high_level_model_kwargs,
                 low_level_classifier_kwargs=low_level_classifier_kwargs,
