@@ -6,6 +6,7 @@ from torch.utils.data import DataLoader, TensorDataset
 import torch
 
 from pytorch_lightning import LightningDataModule
+from torchvision import transforms
 
 # DO NOT CHANGE RANDOM SEED ONCE IT IS SELECTED
 # This would lead to different builds of the dataset
@@ -94,10 +95,14 @@ class UIPRMDDataloader(LightningDataModule):
                  num_ep_in_train: int = None,
                  num_ep_in_val: int = None,
                  num_ep_in_test: int = None,
-                 points_to_use=None):
+                 points_to_use=None,
+                 transforms=transforms.Compose([]),
+                 data_repetitions: int = 1):
         super().__init__()
         self.data = get_data()
         self.batch_size = batch_size
+        self.transforms = transforms
+        self.data_repetitions = data_repetitions
         self.rng = np.random.RandomState(RANDOM_SEED)
 
         self.sub_train, self.sub_val, self.sub_test = self.get_choice_sample(
@@ -111,11 +116,11 @@ class UIPRMDDataloader(LightningDataModule):
 
         self.points_to_use = points_to_use
         if points_to_use is not None:
-            self.point_mask = np.array([[True,] * 3 if point in points_to_use else [False, ] * 3
+            self.point_mask = np.array([[True, ] * 3 if point in points_to_use else [False, ] * 3
                                         for point in POINT_LABEL_ORDER]).reshape(-1)
         else:
             self.point_mask = np.ones(len(POINT_LABEL_ORDER) * 3, dtype=bool)
-        
+
         self.save_hyperparameters()
 
     def get_choice_sample(self, total, train, val, test):
@@ -144,8 +149,10 @@ class UIPRMDDataloader(LightningDataModule):
                       & self.data["movement"].isin(mov)
                       & self.data["episode"].isin(ep))
         sampled_data = self.data[expression]
-        angles = np.array([a for a in sampled_data["angles"].values])[..., self.point_mask]
-        positions = np.array([a for a in sampled_data["positions"].values])[..., self.point_mask]
+        angles = np.array(
+            [a for a in sampled_data["angles"].values])[..., self.point_mask]
+        positions = np.array(
+            [a for a in sampled_data["positions"].values])[..., self.point_mask]
         values = np.concatenate([angles, positions], axis=-1)
 
         N = values.shape[0]
@@ -157,10 +164,19 @@ class UIPRMDDataloader(LightningDataModule):
 
         return values, labels, movement, subject
 
+    def repeat(self, x):
+        repeat_vals = [1, ] * len(x.shape)
+        repeat_vals[0] = self.data_repetitions
+        return x.repeat(repeat_vals)
+
     def train_dataloader(self):
         values, labels, movement, subject = self.sample_data(
             self.sub_train, self.mov_train, self.ep_train)
         batch_size = self.batch_size
+
+        values = self.transforms(self.repeat(values))
+        labels = self.repeat(labels)
+
         if batch_size == -1:
             batch_size = values.shape[0]
         return DataLoader(TensorDataset(values, labels), batch_size=batch_size)
@@ -169,6 +185,10 @@ class UIPRMDDataloader(LightningDataModule):
         values, labels, movement, subject = self.sample_data(
             self.sub_val, self.mov_val, self.ep_val)
         batch_size = self.batch_size
+
+        values = self.repeat(values)
+        labels = self.repeat(labels)
+
         if batch_size == -1:
             batch_size = values.shape[0]
         return DataLoader(TensorDataset(values, labels), batch_size=batch_size)
@@ -177,15 +197,34 @@ class UIPRMDDataloader(LightningDataModule):
         values, labels, movement, subject = self.sample_data(
             self.sub_test, self.mov_test, self.ep_test)
         batch_size = self.batch_size
+
+        values = self.repeat(values)
+        labels = self.repeat(labels)
+
         if batch_size == -1:
             batch_size = values.shape[0]
         return DataLoader(TensorDataset(values, labels), batch_size=batch_size)
 
 
 class UIPRMDSingleDataloader(UIPRMDDataloader):
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self,
+                 batch_size: int,
+                 num_sub_in_train: int = None,
+                 num_sub_in_val: int = None,
+                 num_sub_in_test: int = None,
+                 num_mov_in_train: int = None,
+                 num_mov_in_val: int = None,
+                 num_mov_in_test: int = None,
+                 num_ep_in_train: int = None,
+                 num_ep_in_val: int = None,
+                 num_ep_in_test: int = None,
+                 points_to_use=None,
+                 transforms=transforms.Compose([]),
+                 data_repetitions: int = 1):
+        super().__init__(batch_size, num_sub_in_train, num_sub_in_val, 
+                         num_sub_in_test, num_mov_in_train, num_mov_in_val,
+                         num_mov_in_test, num_ep_in_train, num_ep_in_val,
+                         num_ep_in_test, points_to_use, transforms, data_repetitions)
         self.subject = None
         self.movement = None
 
@@ -207,6 +246,7 @@ class UIPRMDSingleDataloader(UIPRMDDataloader):
 
         return values[mask, ...], labels[mask], movement[mask], subject[mask]
 
+
 if __name__ == "__main__":
 
     # dl = UIPRMDDataloader(batch_size=-1, num_ep_in_train=6, num_ep_in_val=2, num_ep_in_test=2)
@@ -224,7 +264,8 @@ if __name__ == "__main__":
     # dl.teardown("fit")
     # print(f"Duration: {end - start}")
 
-    dl = UIPRMDSingleDataloader(batch_size=-1, num_ep_in_train=6, num_ep_in_val=2, num_ep_in_test=2)
+    dl = UIPRMDSingleDataloader(
+        batch_size=-1, num_ep_in_train=6, num_ep_in_val=2, num_ep_in_test=2)
     for i in range(1, 11):
         for j in range(1, 11):
             dl.set_subject(subject=i)
@@ -234,4 +275,3 @@ if __name__ == "__main__":
             for tbatch, vbatch in zip(dt, dv):
                 print(f"{tbatch[0].shape}")
             print(f"{vbatch[1].shape}")
-
