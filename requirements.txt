@@ -1,0 +1,15 @@
+h5py==3.6.0
+matplotlib==3.4.3
+numpy==1.21.2
+pandas==1.3.4
+pyampd==0.0.1
+pytest==6.2.5
+pytorch_lightning==1.5.1
+scikit_learn==1.1.0
+scipy==1.7.1
+setuptools==58.0.4
+stumpy==1.11.1
+torch==1.9.1
+torchmetrics==0.5.1
+torchvision==0.10.1
+tslearn==0.5.2
