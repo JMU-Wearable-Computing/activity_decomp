@@ -449,45 +449,6 @@ def scale(x, mean=None, std=None):
         std = np.std(x, axis=1)
     return (x - mean[:, np.newaxis]) / std[:, np.newaxis], mean, std
 
-# def find_global_important_sections(local_points, length, covariance_factor=0.01):
-
-#     density = gaussian_kde(local_points)
-#     xs = np.linspace(0, length, length)
-#     density.covariance_factor = lambda : covariance_factor
-#     density._compute_covariance()
-
-#     density = density(xs)
-#     density_peaks = find_peaks(density)
-#     return density_peaks, density
-
-
-# def segment(angles, covariance_factor=0.01, return_density=False, return_local_info=False):
-#     assert len(angles.shape) == 2
-#     B, T = angles.shape
-#     all_local_points = []
-#     all_points_before = []
-#     all_points_after = []
-#     all_means = []
-#     for ts in angles:
-#         means, points_before, points_after = find_important_sections(ts)
-#         local_points = (points_before + points_after) / 2
-#         all_local_points.append(local_points)
-#         all_points_before.append(points_before)
-#         all_points_after.append(points_after)
-#         all_means.append(means)
-    
-#     flattened = np.hstack(all_local_points)
-#     density_peaks, density = find_global_important_sections(flattened, T, covariance_factor)
-
-#     return_list = [density_peaks]
-#     if return_density:
-#         return_list.append(density)
-#     if return_local_info:
-#         return_list.append(all_local_points)
-#         return_list.append(all_points_before)
-#         return_list.append(all_points_after)
-#         return_list.append(all_means)
-#     return return_list
 
 if __name__ == "__main__":
     # jj = pd.read_csv("jumping_jack_blaze.csv", index_col="timestamp").values[25:]
@@ -520,51 +481,7 @@ if __name__ == "__main__":
         ax.set_xticks((points[:-1] + points[1:]) / 2)
         ax.set_xticklabels([f"{s:.2}" for s in score])
 
-
-    # ret_list = segment(angles, k=2, return_density=True, return_local_info=True, covariance_factor=0.01)
-    # density_peaks, valid_idx, invalid_idx, density, local_points, points_before, points_after, means = ret_list
-
-
-    #####
-    # pos_sizes = np.array([pos.size for pos in local_points])
-    # size_diff = np.expand_dims(pos_sizes - density_peaks.size, axis=-1)
-    # print(size_diff)
-
-    # idx_diff = [np.abs(pos[:, np.newaxis] - density_peaks) for pos in local_points]
-    # closest_diff = [np.argmin(diff, axis=1) for diff in idx_diff]
-    # mean_diff = np.array([np.mean(diff[np.arange(diff.shape[0]), closest]) for diff, closest in zip(idx_diff, closest_diff)])
-    # print(mean_diff)
-    # k = 2
-    # point_diff = np.zeros([angles.shape[0]])
-    # for i, points in enumerate(local_points):
-    #     # points = np.array(points[:points.shape[0] - points.shape[0] % 2], dtype=int)
-    #     points = np.array(points, dtype=int)
-    #     mean = 0
-    #     for j in range(k):
-    #         mean += np.mean(np.abs(angles[i, points][::k][:-1] - angles[i, points][k::k]))
-    #     point_diff[i] = mean
-
-    # # diff = np.std(np.diff(angles, axis=1), axis=1)
-    # # _, s, _ = np.linalg.svd(angles[..., np.newaxis])
-    # features = np.column_stack([point_diff])
-    # print(f"features: {features}")
-    # # non_outliers = arg_reject_outliers(pos_sizes - density_peaks.size, m=1)
-    # # print(non_outliers)
-    # gmm = GaussianMixture(n_components=2, n_init=10).fit(features)
-    # print(f"means: {gmm.means_}")
-    # min_mean_args = np.argmin(np.abs(gmm.means_), axis=0)
-    # min_mean_arg = np.argmax(np.bincount(min_mean_args))
-    # print(f"min_arg: {min_mean_arg}")
-    # predictions = gmm.predict(features)
-    # print(predictions)
-
-    # valid_angles = np.where(predictions == min_mean_arg)[0]
-    # invalid_angles = np.where(predictions != min_mean_arg)[0]
-
 ######
-    # all_models = []
-
-    # fig, axes = plt.subplots(data.shape[0] + 1, 1, figsize=(8,8))
 
     pred, sigma = gp.predict(points)
     for i, ax in enumerate(axes[:-1]):
@@ -576,22 +493,4 @@ if __name__ == "__main__":
                         (pred[i] + 1.9600 * sigma[i])[::-1]]),
          alpha=.5, fc='b', ec='None', label='95% confidence interval')
     
-    # down_sampled = angles[0, density_peaks[0]:density_peaks[1]]
-    # x = np.arange(0, len(down_sampled))
-    # print(all_models[0][0].score(x.reshape(-1, 1), down_sampled.reshape(-1, 1)))
-
-    # down_sampled = angles[0, density_peaks[0]:density_peaks[1]][::2]
-    # x = np.arange(0, len(down_sampled)) * 2
-    # print(x)
-    # print(down_sampled.shape)
-    # print(all_models[0][0].score(x.reshape(-1, 1), down_sampled.reshape(-1, 1)))
-
-    # sample = angles[0, density_peaks[0]:density_peaks[1]]
-    # x = np.linspace(0, len(sample), len(sample) * 2)
-    # y = np.interp(x, np.arange(len(sample)), sample)
-    # print(x)
-    # print(x.shape)
-    # print(y.shape)
-    # print(all_models[0][0].score(x.reshape(-1, 1), y.reshape(-1, 1)))
-
     plt.show()
