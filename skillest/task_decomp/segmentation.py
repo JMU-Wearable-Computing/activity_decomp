@@ -117,6 +117,9 @@ class Segmentation():
         self.scale_data = scale_data
     
     def fit(self, data, return_properties=False):
+        data = np.array(data)
+        if len(data.shape) == 1:
+            data = np.expand_dims(data, axis=0)
         if self.scale_data:
             data, self.mean, self.std = self.scale(data)
         return self.segment(data)
@@ -176,16 +179,20 @@ class Segmentation():
         all_points_after = []
         all_means = []
         all_zvc = []
+        all_peaks = []
         properties = {"local_segments": all_local_segment, "points_before": all_points_before,
-                      "points_after": all_points_after, "means": all_means, "zcvs": all_zvc}
+                      "points_after": all_points_after, "means": all_means, "zvcs": all_zvc,
+                      "peaks": all_peaks}
         for p, d in zip(pos, deriv):
-            means, points_before, points_after, zvc = self.find_important_sections(p, d)
+            means, points_before, points_after, zvc, peaks = self.find_important_sections(p, d)
             local_segment = (points_before + points_after) / 2
             all_local_segment.append(local_segment)
             all_points_before.append(points_before)
             all_points_after.append(points_after)
             all_means.append(means)
             all_zvc.append(zvc)
+            all_peaks.append(peaks)
+        print(all_local_segment[0])
         
         return properties 
 
@@ -193,23 +200,58 @@ class Segmentation():
 
         pos_peaks = find_peaks(deriv).reshape(-1)
         neg_peaks = find_peaks(-deriv).reshape(-1)
-        peaks = np.concatenate([pos_peaks, neg_peaks])
+        peaks = np.sort(np.concatenate([pos_peaks, neg_peaks]))
 
         zvc = np.where(np.diff(np.sign(deriv)) != 0)[0]
+        # zvc = find_peaks(-np.abs(deriv)).reshape(-1)
 
         greater = peaks[:, np.newaxis] > zvc
         idx_before_peak = np.where(np.diff(greater) != 0)[1]
         idx_after_peak = idx_before_peak + 1
 
-        # Remove first and last because we want mean between peaks.
-        points_before = np.sort(zvc[idx_before_peak])[1:]
-        points_after = np.sort(zvc[idx_after_peak])[:-1]
+        # If there are no zvcs before first peak then we must use 
+        # the first zcv as the start of the first important segment.
+        # To do this we add it to the idx_before_peak
+        print(idx_after_peak)
+        print(idx_before_peak)
+        if np.all(greater[0, :] == 0):
+            tmp = np.zeros(idx_after_peak.size + 1, dtype=int)
+            tmp[1:] = idx_after_peak
+            idx_after_peak = tmp
+        else:
+            idx_before_peak = idx_before_peak[1:]
+
+        if np.all(greater[-1, :] == 1):
+            tmp = np.zeros(idx_before_peak.size + 1, dtype=int)
+            tmp[:-1] = idx_before_peak
+            tmp[-1] = zvc.size - 1
+            idx_before_peak = tmp
+        else:
+            idx_after_peak = idx_after_peak[:-1]
+
+        points_before = zvc[idx_before_peak]
+        points_after = zvc[idx_after_peak]
 
         means = [np.mean(pos[beg:end+1]) for beg,end in zip(points_after, points_before)]
         
-        return means, points_before, points_after, zvc
+        return means, points_before, points_after, zvc, peaks
+    
+    def plot_extra(self, ax, i, valid_idx, data, properties):
+        valid = properties["valid"]
 
-    def plot_segmentation(self, data, data_labels=None):
+        deriv = self.deriv_func(data)
+        peaks = properties["peaks"]
+        zvcs = properties["zvcs"]
+
+        ax2 = ax.twinx()
+        ax2.plot(deriv[i], c="r")
+
+        if i in valid:
+            ax2.scatter(zvcs[valid_idx], deriv[valid_idx][zvcs[valid_idx]], color="b")
+            ax2.scatter(peaks[valid_idx], deriv[valid_idx][peaks[valid_idx]], color="r")
+
+
+    def plot_segmentation(self, data, data_labels=None, plot_extra=False):
         data = np.array(data)
         if len(data.shape) == 1:
             data = np.expand_dims(data, axis=0)
@@ -219,17 +261,21 @@ class Segmentation():
         segments, properties = self.segment(data, return_properties=True)
         valid, density = properties["valid"], properties["density"]
         local_segments, means = properties["local_segments"], properties["means"]
+
         if self.scale_data:
             data, _, _ = self.scale(data, self.mean, self.std)
 
-        j = 0
+        valid_idx = 0
         for i, (ax, key) in enumerate(zip(axes[:-1], data_labels)):
             values = data[i]
 
             ax.plot(values, c="g")
+            if plot_extra:
+                self.plot_extra(ax, i, valid_idx, data, properties)
+
             if i in valid:
-                ax.scatter(local_segments[j], means[j], color="g")
-                j += 1
+                ax.scatter(local_segments[valid_idx], means[valid_idx], color="g")
+                valid_idx += 1
             else:
                 key = f"{key} (invalid)"
             ax.title.set_text(key)
@@ -258,17 +304,123 @@ class Segmentation():
             std = np.std(x, axis=1)
         return (x - mean[:, np.newaxis]) / std[:, np.newaxis], mean, std
 
+class SegmentationMinValue(Segmentation):
+
+    def local_segment(self, pos, deriv):
+        assert len(pos.shape) == 2
+
+        all_local_segment = []
+        all_means = []
+        all_peaks = []
+        properties = {"local_segments": all_local_segment, "means": all_means, 
+                      "peaks": all_peaks}
+        for p, d in zip(pos, deriv):
+            local_segment, means, peaks = self.find_important_sections(p, d)
+            all_local_segment.append(local_segment)
+            all_means.append(means)
+            all_peaks.append(peaks)
+        
+        return properties 
+
+    def find_important_sections(self, pos, deriv):
+        LARGE_NUM = 10000000
+        pos_peaks = find_peaks(deriv).reshape(-1)
+        neg_peaks = find_peaks(-deriv).reshape(-1)
+        peaks = np.sort(np.concatenate([pos_peaks, neg_peaks]))
+
+        edge_cases = [peaks]
+        if peaks[0] != 0:
+            edge_cases.insert(0, [0])
+        if peaks[-1] != pos.size - 1:
+            edge_cases.append([pos.size - 1])
+        peaks = np.concatenate(edge_cases)
+
+        largest_seg = np.max(np.diff(peaks))
+        # min_deriv = find_peaks(-np.abs(deriv)).reshape(-1)
+        segment_slices = np.ones([peaks.size - 1, largest_seg], dtype=int) * -1
+        precaluated_range = np.arange(largest_seg)
+        for i in range(peaks.size - 1):
+            peak_0 = peaks[i]
+            peak_1 = peaks[i + 1]
+            length = peak_1 - peak_0
+            segment_slices[i, :length] = precaluated_range[:length] + peak_0
+        # segment_slices[:, :-1] += peaks[:-1, None]
+
+        deriv = np.concatenate([deriv, [LARGE_NUM]])
+        segment_slice_min_idx = np.argmin(np.abs(uniform_filter1d(deriv[segment_slices], size=5, mode="constant", cval=LARGE_NUM)), axis=1)
+        segment_min_idx = segment_slices[np.arange(len(segment_slices)), segment_slice_min_idx]
+
+        return segment_min_idx, pos[segment_min_idx], peaks
+    
+    def plot_extra(self, ax, i, valid_idx, data, properties):
+        valid = properties["valid"]
+        deriv = self.deriv_func(data)
+        peaks = properties["peaks"]
+
+        ax2 = ax.twinx()
+        ax2.plot(deriv[i], c="r")
+        if i in valid:
+            ax2.scatter(peaks[i], deriv[i][peaks[i]], color="r")
+
+
+class SegmentationMinLength(Segmentation):
+
+    def __init__(self, k,
+                covariance_factor=0.01,
+                dof_filter: DofFilter = DofFilter(DerivStdMetric()), valid=None, invalid=None,
+                data_filter: Callable = None, deriv_func: Callable = SavgolFilter(5, 2, deriv=1),
+                scale_data=True,
+                min_length=5):
+        super().__init__(k, covariance_factor, dof_filter, valid, invalid, data_filter, deriv_func, scale_data)
+        self.min_length = min_length
+
+    def local_segment(self, pos, deriv):
+        assert len(pos.shape) == 2
+
+        all_local_segment = []
+        all_means = []
+        properties = {"local_segments": all_local_segment, "means": all_means}
+        for p, d in zip(pos, deriv):
+            local_segment, means = self.find_important_sections(p, d)
+            all_local_segment.append(local_segment)
+            all_means.append(means)
+        
+        return properties 
+
+    def find_important_sections(self, pos, deriv):
+
+        zvc = np.where(np.diff(np.sign(deriv)) != 0)[0]
+        segments = []
+        for c in zvc:
+            if (len(deriv) > c + self.min_length and
+                np.abs(np.sum(np.sign(deriv[c+1:c+self.min_length+1]))) == self.min_length):
+                segments.append(c)
+
+        return np.array(segments), pos[segments]
+    
+    def plot_extra(self, ax, i, valid_idx, data, properties):
+
+        deriv = self.deriv_func(data)
+        ax2 = ax.twinx()
+        ax2.plot(deriv[i], c="r")
+
+
 if __name__ == "__main__":
     import pandas as pd
+    import time
 
     jj = pd.read_csv("jumping_jack_blaze.csv", index_col="timestamp").values[25:]
     data, angle_dict, idx_dict = get_all_2d_angles(jj)
 
-    seg = Segmentation(k=2)
+    seg = SegmentationMinLength(k=2, data_filter=UniformFilter(5), min_length=10)
+    # seg = SegmentationMinValue(k=2, data_filter=UniformFilter(5))
     # fig, axes = plot_segmentation(data, list(angle_dict.keys()), k=2)
     seg.fit(data)
+    start = time.time()
     points = seg.segment(data)
-    seg.plot_segmentation(data, angle_dict.keys())
+    end = time.time()
+    print(end - start)
+    seg.plot_segmentation(data, angle_dict.keys(), True)
     plt.show()
     # gp = GaussianProcessSegmentModels(k=2)
     # gp.fit(points, data)
