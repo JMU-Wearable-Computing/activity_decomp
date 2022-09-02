@@ -222,9 +222,11 @@ class KDEGlobalSegment(Filter):
 
 
 class GaussianFilterGlobalSegment(Filter):
-    def __init__(self, sigma=5) -> None:
+    def __init__(self, sigma=5, min_density=0.2, min_important_points=2) -> None:
         super().__init__()
         self.sigma = sigma
+        self.min_density = min_density
+        self.min_important_points = min_important_points
     
     def __call__(self, data, length):
         flattened = np.hstack(data)
@@ -234,14 +236,23 @@ class GaussianFilterGlobalSegment(Filter):
         density[:len(counts)] = counts
         density = gaussian_filter1d(density, self.sigma)
 
-        density_peaks = find_peaks(density)
+        if len(flattened) < self.min_important_points:
+            return np.array([], dtype=bool), density 
+
+        try:
+            density_peaks = find_peaks(density)
+        except:
+            density_peaks = np.array([], dtype=bool)
+
         if length - 1 in density_peaks:
             density_peaks = density_peaks[:-1]
         
-        mean = np.mean(density[density_peaks])
-        std = np.std(density[density_peaks])
-        non_outlier = density[density_peaks] > mean - std * 2
-        density_peaks = density_peaks[non_outlier]
+        if len(density_peaks) > 0:
+            mean = np.mean(density[density_peaks])
+            std = np.std(density[density_peaks])
+            non_outlier = density[density_peaks] > mean - std * 3
+            non_outlier = non_outlier & (density[density_peaks] > self.min_density)
+            density_peaks = density_peaks[non_outlier]
 
         return density_peaks, density
 
@@ -525,7 +536,8 @@ class SegmentationMinLength(Segmentation):
 
     def __init__(self, k,
                 dof_filter: DofFilter = DofFilter(DerivStdMetric()), valid=None, invalid=None,
-                data_filter: Callable = None, deriv_func: Callable = SavgolFilter(5, 2, deriv=1),
+                data_filter: Callable = GaussianFilter(10),
+                deriv_func: Callable = SavgolFilter(5, 2, deriv=1),
                 global_segment_filter: Filter=GaussianFilterGlobalSegment(),
                 scale_data=True,
                 min_length=5):
@@ -573,7 +585,7 @@ if __name__ == "__main__":
     data, angle_dict, idx_dict = get_all_2d_angles(jj)
 
     seg = SegmentationMinLength(k=2, data_filter=GaussianFilter(10), min_length=5, valid=list(range(6)))
-    # seg = SegmentationMinValue(k=2, data_filter=GaussianFilter(10))
+    # seg = SegmentationMinValue(k=2, data_filter=GaussianFilter(10), valid=list(range(6)))
     # seg = Segmentation(k=2, data_filter=GaussianFilter(10))
     # fig, axes = plot_segmentation(data, list(angle_dict.keys()), k=2)
     # seg.fit(data)
@@ -581,7 +593,7 @@ if __name__ == "__main__":
     points = seg.segment(data)
     end = time.time()
     print(end - start)
-    seg.plot_segmentation(np.tile(data[:, :325], [1, 1]), angle_dict.keys(), True)
+    seg.plot_segmentation(np.tile(data[:, :270], [1, 1]), angle_dict.keys(), True)
     plt.show()
     # gp = GaussianProcessSegmentModels(k=2)
     # gp.fit(points, data)
