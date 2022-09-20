@@ -273,6 +273,11 @@ class UniformFilterGlobalSegment(Filter):
         density_peaks = find_peaks(density)
         return density_peaks, density
 
+class IdentityGlobalFilter(Filter):
+
+    def __call__(self, data, length):
+        return np.hstack(data).astype(int), np.zeros(length)
+
 
 class Segmentation():
 
@@ -451,6 +456,10 @@ class Segmentation():
         fig.subplots_adjust(left=None, bottom=None, right=None, top=None, wspace=None, hspace=1.0)
 
         axes[-1].plot(np.arange(density.size),density)
+        ndata = self.data_filter(data)
+        deriv = np.prod(self.deriv_func(ndata[valid]), axis=0) + np.mean(self.deriv_func(ndata[2:5]), axis=0)
+        ax2 = axes[-1].twinx()
+        ax2.plot(deriv, c="r")
         axes[-1].scatter(segments, density[segments], color="g")
         axes[-1].title.set_text("Gaussian Density Plot of Important Points")
 
@@ -536,9 +545,9 @@ class SegmentationMinLength(Segmentation):
 
     def __init__(self, k,
                 dof_filter: DofFilter = DofFilter(DerivStdMetric()), valid=None, invalid=None,
-                data_filter: Callable = GaussianFilter(10),
+                data_filter: Callable = GaussianFilter(5),
                 deriv_func: Callable = SavgolFilter(5, 2, deriv=1),
-                global_segment_filter: Filter=GaussianFilterGlobalSegment(),
+                global_segment_filter: Filter=GaussianFilterGlobalSegment(3),
                 scale_data=True,
                 min_length=5):
         super().__init__(k, dof_filter, valid, invalid, data_filter, deriv_func, global_segment_filter, scale_data)
@@ -577,23 +586,79 @@ class SegmentationMinLength(Segmentation):
         ax2.plot(deriv[i], c="r")
 
 
+class SegmentationMinLengthOneAxis(Segmentation):
+
+    def __init__(self, k,
+                dof_filter: DofFilter = DofFilter(DerivStdMetric()), valid=None, invalid=None,
+                data_filter: Callable = GaussianFilter(5),
+                deriv_func: Callable = SavgolFilter(5, 2, deriv=1),
+                global_segment_filter: Filter=GaussianFilterGlobalSegment(3),
+                scale_data=True,
+                dof=0):
+        super().__init__(k, dof_filter, valid, invalid, data_filter, deriv_func, global_segment_filter, scale_data)
+        self.dof = dof
+
+    def local_segment(self, pos, deriv):
+        assert len(pos.shape) == 2
+
+        all_local_segment = []
+        all_means = []
+        properties = {"local_segments": all_local_segment, "means": all_means}
+        for p, d in zip(pos, deriv):
+            all_local_segment.append([])
+            all_means.append([])
+        all_local_segment[self.dof], all_means[self.dof] = self.find_important_sections(pos[self.dof], deriv[self.dof])
+        
+        return properties 
+
+    def find_important_sections(self, pos, deriv):
+        print(deriv)
+        segments = np.where(np.diff(np.sign(deriv)) != 0)[0]
+        # segments = []
+        # for c in zvc:
+        #     if (len(deriv) > c + self.min_length and
+        #         np.abs(np.sum(np.sign(deriv[c+1:c+self.min_length+1]))) == self.min_length):
+        #         segments.append(c)
+
+        return np.array(segments), pos[segments]
+    
+    def plot_extra(self, ax, i, valid_idx, data, properties):
+
+        if self.data_filter is not None:
+            data = self.data_filter(data)
+        deriv = self.deriv_func(data)
+        ax2 = ax.twinx()
+        ax2.plot(deriv[i], c="r")
+
 if __name__ == "__main__":
     import pandas as pd
     import time
 
-    jj = pd.read_csv("jumping_jack_blaze.csv", index_col="timestamp").values[50:]
+    path = "/Users/rileywhite/wearable-computing/human-path-planning/data/last_recording2.csv" 
+    # path = "jumping_jack_blaze.csv"
+    jj = pd.read_csv(path, index_col=0).values[:]
     data, angle_dict, idx_dict = get_all_2d_angles(jj)
 
-    seg = SegmentationMinLength(k=2, data_filter=GaussianFilter(10), min_length=5, valid=list(range(6)))
+    seg = SegmentationMinLengthOneAxis(k=2,
+                                       data_filter=GaussianFilter(2),
+                                       valid=list(range(6)),
+                                       dof=2,
+                                       global_segment_filter=IdentityGlobalFilter())
+    # seg = SegmentationMinLength(k=2, data_filter=GaussianFilter(3), valid=list(range(6)), min_length=1)
     # seg = SegmentationMinValue(k=2, data_filter=GaussianFilter(10), valid=list(range(6)))
-    # seg = Segmentation(k=2, data_filter=GaussianFilter(10))
+    # seg = Segmentation(k=2, data_filter=GaussianFilter(3), valid=list(range(6)))
     # fig, axes = plot_segmentation(data, list(angle_dict.keys()), k=2)
     # seg.fit(data)
     start = time.time()
     points = seg.segment(data)
     end = time.time()
     print(end - start)
-    seg.plot_segmentation(np.tile(data[:, :270], [1, 1]), angle_dict.keys(), True)
+    seg.plot_segmentation(np.tile(data[:, :500], [1, 1]), angle_dict.keys(), True)
+    # for i in range(5, len(data[0]), 5):
+    #     seg.plot_segmentation(np.tile(data[:, :i], [1, 1]), angle_dict.keys(), True)
+    #     # time.sleep(0.1)
+    #     plt.pause(0.0001)
+    #     plt.close()
     plt.show()
     # gp = GaussianProcessSegmentModels(k=2)
     # gp.fit(points, data)
