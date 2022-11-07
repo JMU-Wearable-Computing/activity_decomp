@@ -35,12 +35,12 @@ def get_idx(landmarks, z=True, vis=False, flatten=True):
     idxs = []
     for landmark in landmarks:
         idx = all_landmarks.index(landmark) * 4
-        idx = [idx, idx + 1]
+        idx_l = [idx, idx + 1]
         if z:
-            idx.append(idx + 2)
+            idx_l.append(idx + 2)
         if vis:
-            idx.append(idx + 3)
-        idxs.append(idx)
+            idx_l.append(idx + 3)
+        idxs.append(idx_l)
 
     idxs = np.array(idxs)
     if flatten:
@@ -61,7 +61,7 @@ def gen_angle(d, relative=False):
     return np.rad2deg(angle)
 
 def get_angle(landmarks: list, data):
-    idxs = get_idx(landmarks, z=False, flatten=False)
+    idxs = get_idx(landmarks, z=True, flatten=False)
     return gen_angle(data[:, idxs].transpose([1,0,2]))
 
 def get_all_2d_angles(data):

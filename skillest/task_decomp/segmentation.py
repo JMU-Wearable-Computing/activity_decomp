@@ -366,7 +366,6 @@ class Segmentation():
             all_means.append(means)
             all_zvc.append(zvc)
             all_peaks.append(peaks)
-        print(all_local_segment[0])
         
         return properties 
 
@@ -612,7 +611,6 @@ class SegmentationMinLengthOneAxis(Segmentation):
         return properties 
 
     def find_important_sections(self, pos, deriv):
-        print(deriv)
         segments = np.where(np.diff(np.sign(deriv)) != 0)[0]
         # segments = []
         # for c in zvc:

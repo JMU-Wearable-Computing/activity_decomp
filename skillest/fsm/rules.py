@@ -2,8 +2,9 @@ import time
 from abc import ABC, abstractmethod
 from typing import Union, Dict
 from transitions import State
+from transitions.extensions.nesting import NestedState
 # from transitions.core import CallbacksArg
-from skillest.analysis.distance import Distance
+from skillest.analysis.distance import Distance, EuclideanDistance
 
 
 class Rule(State, ABC):
@@ -23,6 +24,15 @@ class Rule(State, ABC):
         self.key_deviation = key_deviation
         self.duration = duration
         self.duration_deviation = duration_deviation
+        
+        self.parent = None
+        self.child = None
+    
+    def set_parent(self, rule):
+        self.parent = rule
+    
+    def set_child(self, rule):
+        self.child = rule
 
 
 class DynamicRule(Rule):
@@ -91,3 +101,37 @@ class Uncertain(StaticRule):
     
     def set_key_pose(self, pose):
         self.key_data = pose
+
+
+if __name__ == "__main__":
+    from skillest.fsm.model import Model
+    from transitions import Machine, State
+    from transitions.extensions import HierarchicalMachine
+    initial_pose = {"left_shoulder": 0, "right_shoulder": 0}
+    initial_pose_deviation = {"left_shoulder": [-30, 30], "right_shoulder": [-30, 30]}
+    initial = StaticRule("init", key_data=initial_pose,
+                       distance=EuclideanDistance(),
+                       key_deviation=initial_pose_deviation)
+    
+    uncertain_pose_deviation = {"left_shoulder": [-20, 10], "right_shoulder": [-20, 20]}
+    uncertain = Uncertain(EuclideanDistance(),
+                          key_deviation=uncertain_pose_deviation,)
+
+    approaching_pose_deviation = {"left_shoulder": [-20, 20], "right_shoulder": [-20, 20]}
+    approaching = Uncertain(EuclideanDistance(),
+                            name="approaching",
+                            key_deviation=approaching_pose_deviation)
+    
+    states = [initial]
+    initial.add_substates([uncertain, approaching])
+    transitions = [{"trigger": "un", "source": "init", "dest": "init_uncertain"},
+                   {"trigger": "ap", "source": "init_uncertain", "dest": "init"}]
+
+    activity = Model({name: state for name, state in zip([state.name for state in states], states)})
+    m = HierarchicalMachine(model=activity, states=states, transitions=transitions, initial="init", send_event=True)
+
+    print(m.states)
+    activity.un()
+    print(activity.state)
+    activity.ap()
+    print(activity.state)
