@@ -229,32 +229,35 @@ def get_decomposed():
 if __name__ == "__main__":
     import cv2
 
+    k = 2
     ### Uncomment this if you want a live recording decomposed
-    # landmarks = []
-    # frames = 0
-    # for landmark, wlandmark, image in j.blaze.capture(return_image=True):
-    #     frames += 1
-    #     if frames < 50:
-    #         continue
-    #     cv2.putText(image, "Go", (100, 200), cv2.FONT_HERSHEY_SIMPLEX, 8, 255, thickness=10)
-    #     cv2.imshow("blaze", image)
+    landmarks = []
+    frames = 0
+    for landmark, wlandmark, image in j.blaze.capture(return_image=True):
+        frames += 1
+        if frames < 50:
+            cv2.putText(image, "Get Ready", (100, 200), cv2.FONT_HERSHEY_SIMPLEX, 8, 255, thickness=10)
+            cv2.imshow("blaze", image)
+            continue
+        cv2.putText(image, "Go", (100, 200), cv2.FONT_HERSHEY_SIMPLEX, 8, 255, thickness=10)
+        cv2.imshow("blaze", image)
 
-    #     landmarks.append(landmark)
-    # landmarks = np.array(landmarks)
-    # angles_dict = j.blaze.get_all_angles_from_landmarks(landmarks, degrees=True)
+        landmarks.append(landmark)
+    landmarks = np.array(landmarks)
+    angles_dict = j.blaze.get_all_angles_from_landmarks(landmarks, degrees=True)
 
-    # decomposer = Decomposer(k=2, valid_angles=None, grid_search=True, reps=10)
-    # activity, m = decomposer.decompose(angles_dict, landmarks)
+    decomposer = Decomposer(k=2, valid_angles=list(angles_dict.keys()), grid_search=True, reps=10)
+    activity, m = decomposer.decompose(angles_dict, landmarks)
 
-    # fig, axes = decomposer.seg.plot_segmentation(angles_dict, True)
-    # fig.show()
+    fig, axes = decomposer.seg.plot_segmentation(angles_dict, True)
+    fig.show()
 
     ### Uncomment this if you want a prerecorded activity
-    activity, m = get_decomposed()
+    # activity, m = get_decomposed()
 
     cv2.destroyAllWindows()
-    for k in range(2):
-        j.blaze.vizualize(activity.rules[f"pose_{k}"].landmarks, name=f"pose_{k}")
+    for i in range(k):
+        j.blaze.vizualize(activity.rules[f"pose_{k}"].landmarks, name=f"pose_{i}")
     
     cv2.waitKey(0)
 
