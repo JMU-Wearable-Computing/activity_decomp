@@ -17,7 +17,8 @@ class Rule(State, ABC):
                  duration_deviation=None,
                  on_enter = None,
                  on_exit = None,
-                 ignore_invalid_triggers: bool = None) -> None:
+                 ignore_invalid_triggers: bool = None,
+                 landmarks=None) -> None:
         super().__init__(name, on_enter, on_exit, ignore_invalid_triggers)
         self.key_data = key_data
         self.distance = distance
@@ -27,6 +28,16 @@ class Rule(State, ABC):
         
         self.parent = None
         self.child = None
+        self._landmarks = landmarks
+
+    @property
+    def landmarks(self):
+        if self._landmarks is None:
+            raise Exception(f"Landmarks (x,y,z data) has not been set for this rule: {self.name}")
+        return self._landmarks
+    
+    def set_landmarks(self, landmarks):
+        self._landmarks = landmarks
     
     def set_parent(self, rule):
         self.parent = rule
