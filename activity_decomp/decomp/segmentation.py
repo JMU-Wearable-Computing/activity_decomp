@@ -1,16 +1,15 @@
 from typing import Callable, Dict, List, Tuple, Union
-from scipy.signal import savgol_filter, butter, filtfilt, sosfilt
+from scipy.signal import savgol_filter, butter, sosfilt
 from scipy.ndimage.filters import uniform_filter1d
 from scipy.ndimage import gaussian_filter1d
 import numpy as np
 from pyampd.ampd import find_peaks
-from scipy.stats import gaussian_kde, linregress
+from scipy.stats import gaussian_kde
 import scipy as sp
 import matplotlib.pyplot as plt
 import matplotlib
-from sklearn.cluster import KMeans, MeanShift
+from sklearn.cluster import KMeans
 
-# from skillest.task_decomp.blaze_pose_seg import get_all_2d_angles
 
 class Filter():
 

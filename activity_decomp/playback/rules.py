@@ -1,9 +1,7 @@
 import time
-from abc import ABC, abstractmethod
-from typing import Union, Dict
+from abc import ABC
+from typing import Dict
 from transitions import State
-from transitions.extensions.nesting import NestedState
-# from transitions.core import CallbacksArg
 from skillest.analysis.distance import Distance, EuclideanDistance
 
 

@@ -1,13 +1,11 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(
-    name='skill-estimation',
+    name='Activity-Decomp',
     version='0.1',
-    url='https://github.com/JMU-Wearable-Computing/skill-estimation',
+    url='https://github.com/JMU-Wearable-Computing/activity_decomp',
     author='Riley White',
     author_email='rileywhite89@gmail.com',
     license='MIT',
-    packages=[
-        'skillest',
-    ]
-)
+    packages=find_packages()
+    )
