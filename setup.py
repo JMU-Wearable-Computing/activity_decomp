@@ -9,7 +9,7 @@ if os.path.isfile(requirement_path):
 
 
 setup(
-    name='Activity-Decomp',
+    name='activity-decomp',
     version='0.1',
     url='https://github.com/JMU-Wearable-Computing/activity_decomp',
     author='Riley White',
