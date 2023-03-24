@@ -135,3 +135,4 @@ default_UI-PRMD/
 lightning_logs/
 logs/
 default_test/
+.history/
