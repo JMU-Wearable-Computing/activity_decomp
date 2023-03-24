@@ -2,14 +2,11 @@ from typing import Dict, List, Tuple, Union
 from transitions import Machine
 import numpy as np
 
-
-from skillest.analysis.distance import EuclideanDistance
-from skillest.fsm.model import Model, generate_transitions
-from skillest.fsm.rules import StaticRule
-
-from skillest.task_decomp.segmentation import Segmentation
-from skillest.task_decomp.utils import GridSearch, default_grid_w_diff, classify_points
 import joints as j
+
+from activity_decomp.analysis import EuclideanDistance
+from activity_decomp.playback import Model, generate_transitions, StaticRule
+from activity_decomp.decomp import Segmentation, GridSearch, default_grid_w_diff, classify_points
 
 
 class Decomposer():
@@ -116,7 +113,9 @@ class Decomposer():
 
         transitions, states = generate_transitions(poses)
 
-        activity = Model({name: state for name, state in zip([state.name for state in states], states)})
+        print({name: state for name, state in zip([state.name for state in states], states)})
+        states_dict = {name: state for name, state in zip([state.name for state in states], states)}
+        activity = Model(states_dict)
         m = Machine(model=activity, states=states, transitions=transitions, initial="init", send_event=True)
 
         return activity, m
@@ -246,7 +245,7 @@ if __name__ == "__main__":
     landmarks = np.array(landmarks)
     angles_dict = j.blaze.get_all_angles_from_landmarks(landmarks, degrees=True)
 
-    decomposer = Decomposer(k=2, valid_angles=list(angles_dict.keys()), grid_search=True, reps=10)
+    decomposer = Decomposer(k=k, valid_angles=list(angles_dict.keys()), grid_search=True, reps=10)
     activity, m = decomposer.decompose(angles_dict, landmarks)
 
     fig, axes = decomposer.seg.plot_segmentation(angles_dict, True)
@@ -255,9 +254,10 @@ if __name__ == "__main__":
     ### Uncomment this if you want a prerecorded activity
     # activity, m = get_decomposed()
 
+    print(activity.rules)
     cv2.destroyAllWindows()
     for i in range(k):
-        j.blaze.vizualize(activity.rules[f"pose_{k}"].landmarks, name=f"pose_{i}")
+        j.blaze.vizualize(activity.rules[f"pose_{i}"].landmarks, name=f"pose_{i}")
     
     cv2.waitKey(0)
 

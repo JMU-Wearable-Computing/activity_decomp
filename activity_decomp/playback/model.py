@@ -1,8 +1,8 @@
-from tokenize import Double
 from typing import Dict
 from transitions import Machine, State
-from skillest.fsm.rules import Rule, StaticRule, Uncertain
-from skillest.analysis.distance import EuclideanDistance
+
+from activity_decomp.playback.rules import Rule, StaticRule, Uncertain
+from activity_decomp.analysis.distance import EuclideanDistance
 
 
 class Model():

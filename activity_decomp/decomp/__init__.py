@@ -1,6 +1,4 @@
-from .decompose_activity import Decomposer
-from .online_segmentation import OnlineSeg
-from .segmentation import (Filter,
+from activity_decomp.decomp.segmentation import (Filter,
                            Concat,
                            DofFilter,
                            DiffStdMetric,
@@ -19,7 +17,9 @@ from .segmentation import (Filter,
                            Segmentation, 
                            SegmentationMinValue,
                            SegmentationMinLength)
-from .utils import (DEFAULT_GRID,
+from activity_decomp.decomp.utils import (DEFAULT_GRID,
                     default_grid_w_diff,
                     classify_points,
                     GridSearch)
+from activity_decomp.decomp.decompose_activity import Decomposer
+from activity_decomp.decomp.online_segmentation import OnlineSeg

@@ -1,8 +1,11 @@
 import numpy as np
 from sklearn.model_selection import ParameterGrid
 from sklearn.cluster import KMeans
-from skillest.task_decomp.segmentation import * 
 from tqdm import tqdm
+
+from activity_decomp.decomp import (DofFilter, DiffStdMetric,
+               GaussianFilter, SavgolFilter,
+               GaussianGlobalSegment)
 
 
 DEFAULT_GRID = {
@@ -107,6 +110,7 @@ if __name__ == "__main__":
     import pandas as pd
     import time
     import joints as j
+    from activity_decomp.decomp import Segmentation, Concat
 
     # path = "/Users/rileywhite/wearable-computing/human-path-planning/data/last_recording2.csv" 
     # path = "jumping_jack_blaze.csv"

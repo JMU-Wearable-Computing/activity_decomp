@@ -1,8 +1,7 @@
 import numpy as np
 from typing import Callable
-from skillest.task_decomp.blaze_pose_seg import get_all_2d_angles
 
-from skillest.task_decomp.segmentation import GaussianFilter, SavgolFilter
+from activity_decomp.decomp import GaussianFilter, SavgolFilter
 
 
 class OnlineSeg():

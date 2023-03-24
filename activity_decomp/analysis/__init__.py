@@ -1,2 +1,2 @@
-from .distance import *
-from .gaussian_process import GaussianProcess
+from activity_decomp.analysis.distance import Distance, EuclideanDistance
+from activity_decomp.analysis.gaussian_process import GaussianProcess

@@ -2,7 +2,8 @@ import time
 from abc import ABC
 from typing import Dict
 from transitions import State
-from skillest.analysis.distance import Distance, EuclideanDistance
+
+from activity_decomp.analysis.distance import Distance, EuclideanDistance
 
 
 class Rule(State, ABC):
@@ -113,7 +114,7 @@ class Uncertain(StaticRule):
 
 
 if __name__ == "__main__":
-    from skillest.fsm.model import Model
+    from activity_decomp.playback.model import Model
     from transitions import Machine, State
     from transitions.extensions import HierarchicalMachine
     initial_pose = {"left_shoulder": 0, "right_shoulder": 0}
