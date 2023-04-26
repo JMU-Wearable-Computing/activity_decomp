@@ -71,7 +71,7 @@ def adaptive_cluster(min_k, max_k, points, clustering_f=KMeans, cluster_params={
         if N < k:
             break
 
-        kmeans = clustering_f(n_clusters=k, **cluster_params).fit(points)
+        kmeans = clustering_f(n_clusters=k, n_init=10, **cluster_params).fit(points)
         classes = kmeans.labels_
         centriods = kmeans.cluster_centers_
         intra = 0
@@ -122,7 +122,7 @@ def classify_points(points, angles, seg, k, clustering_f=KMeans, cluster_params=
     if per_point.shape[0] < k:
         return None, None
 
-    classes = clustering_f(n_clusters=k, **cluster_params).fit(per_point).labels_
+    classes = clustering_f(n_clusters=k, n_init=10, **cluster_params).fit(per_point).labels_
 
     return classes, order_points(points, classes, k)
 
