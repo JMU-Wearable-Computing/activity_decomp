@@ -61,6 +61,30 @@ class DerivStdMetric():
     def __call__(self, data, deriv):
         return -1 * np.std(deriv, axis=1)
 
+class FFTMetric(Filter):
+
+    def __init__(self, threshold=0.9) -> None:
+        self.threshold = threshold
+
+    def __call__(self, data, deriv):
+        fft = np.fft.fft(data, n=int(deriv.shape[1]), axis=-1)[:, 1:]
+        power = np.abs(fft)[:, :int(deriv.shape[1] / 2)]
+        primary_freq = np.argmax(np.sum(power, axis=0))
+        sorted_idx = np.argsort(power[:, primary_freq])[::-1]
+        # plt.plot(np.sum(power, axis=0))
+        # plt.show()
+
+        power_sum = np.sum(power[:, primary_freq])
+        sorted = power[sorted_idx, :]
+        m = 1
+        for i in range(1, deriv.shape[0]):
+            top_m = np.sum(sorted[:i, primary_freq])
+            ratio = top_m / power_sum
+            if ratio > self.threshold:
+                break
+            m = i
+        return sorted_idx[:m], sorted_idx[m:]
+
 
 class UniformFilter(Filter):
     def __init__(self, size, axis=-1, mode="reflect", cval=0.0, origin=0) -> None:
@@ -366,7 +390,7 @@ class Segmentation():
                  data_filter: Filter=GaussianFilter(2),
                  deriv_func: Filter=Concat(GaussianFilter(2), SavgolFilter(5, 2, deriv=1)),
                  global_segment: Filter=GaussianGlobalSegment(2),
-                 dof_filter: DofFilter=DofFilter(DerivStdMetric()),
+                 dof_filter: Filter=DofFilter(DerivStdMetric()),
                  average_zvc: bool=True,
                  scale_data=True):
         """Creates object to perform Segmentation.
@@ -385,7 +409,7 @@ class Segmentation():
                 Defaults to Concat(GaussianFilter(2), SavgolFilter(5, 2, deriv=1)).
             global_segment (Filter, optional): Filter to generate global segments from
                 local segments. Defaults to GaussianGlobalSegment(2).
-            dof_filter (DofFilter, optional): Picks the valid/invalid DOF automatically.
+            dof_filter (Filter, optional): Picks the valid/invalid DOF automatically.
                 Defaults to DofFilter(DerivStdMetric()).
             average_zvc (bool,  optional): If to use average position of zvc instead
                 of middle of first and last zvc in a segment. Defaults to True.
@@ -487,7 +511,7 @@ class Segmentation():
         assert self.deriv_func is not None, "Must have a valid deriv func not None."
         deriv = self.deriv_func(data)
 
-        self.set_valid_joints(unmodified_data, deriv)
+        self.set_valid_joints(data, deriv)
 
         return data, deriv
     

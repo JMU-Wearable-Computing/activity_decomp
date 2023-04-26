@@ -16,10 +16,12 @@ from activity_decomp.decomp.segmentation import (Filter,
                            IdentityGlobalFilter,
                            Segmentation, 
                            SegmentationMinValue,
-                           SegmentationMinLength)
+                           SegmentationMinLength,
+                           FFTMetric)
 from activity_decomp.decomp.utils import (DEFAULT_GRID,
                     default_grid_w_diff,
                     classify_points,
-                    GridSearch)
+                    GridSearch,
+                    default_grid_w_valid_powerset)
 from activity_decomp.decomp.decompose_activity import Decomposer
 from activity_decomp.decomp.online_segmentation import OnlineSeg

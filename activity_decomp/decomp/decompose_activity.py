@@ -2,11 +2,17 @@ from typing import Dict, List, Tuple, Union
 from transitions import Machine
 import numpy as np
 
-import joints as j
+import importlib.util
+if importlib.util.find_spec("joints"):
+    import joints as j
 
 from activity_decomp.analysis import EuclideanDistance
 from activity_decomp.playback import Model, generate_transitions, StaticRule
-from activity_decomp.decomp import Segmentation, GridSearch, default_grid_w_diff, classify_points
+from activity_decomp.decomp import (Segmentation,
+                                    GridSearch, 
+                                    default_grid_w_diff,
+                                    classify_points,
+                                    default_grid_w_valid_powerset)
 
 
 class Decomposer():
@@ -35,11 +41,13 @@ class Decomposer():
         cv2.waitKey(0)
     """
 
+
     def __init__(self, k: int,
                  seg: Segmentation=None,
                  valid_angles: List[any]=None,
                  grid_search: bool=True,
-                 reps: int=None) -> None:
+                 reps: int=None,
+                 backend="blaze") -> None:
         """Makes a decomposer object.
 
         Args:
@@ -60,6 +68,14 @@ class Decomposer():
                 object cannot be created.
             Exception: If seg is non-none when grid_search is True or a custom Object.
         """
+
+        if importlib.util.find_spec("joints"):
+            self.BACKEND_MAP = {"blaze": j.blaze}
+            self.backend = self.BACKEND_MAP[backend]
+        else:
+            self.BACKEND_MAP = None
+            self.backend = None
+
         self.k = k
         self.grid_search = None
         self.seg = None
@@ -97,13 +113,13 @@ class Decomposer():
             points = self.seg.fit(angle_dict)
             points = classify_points(points, angle_dict, self.seg, self.k)
         else:
-            points, self.seg, _ = self.grid_search.fit(angle_dict)
+            points, self.seg, self.k, _ = self.grid_search.fit(angle_dict)
 
         angle_avg, angle_std, landmarks_avg = [0,] * self.k, [0,] * self.k, [0,] * self.k,
         for i, p in enumerate(points):
             angle_avg[i], angle_std[i] = self.avg_pose(angle_dict, p)
-            if landmarks is not None:
-                landmarks_avg[i] = j.blaze.average_landmarks(landmarks[p, :])
+            if landmarks is not None and self.backend is not None:
+                landmarks_avg[i] = self.backend.average_landmarks(landmarks[p, :])
 
         poses = self.make_poses(angle_avg, angle_std, self.seg.valid)
 
@@ -113,7 +129,6 @@ class Decomposer():
 
         transitions, states = generate_transitions(poses)
 
-        print({name: state for name, state in zip([state.name for state in states], states)})
         states_dict = {name: state for name, state in zip([state.name for state in states], states)}
         activity = Model(states_dict)
         m = Machine(model=activity, states=states, transitions=transitions, initial="init", send_event=True)
@@ -196,13 +211,48 @@ class Decomposer():
         poses[-1].set_child(poses[1])
         return poses
 
+def get_powerset_decomp(angles_dict):
+
+    all_dict = {}
+    # all_dict["all_sum"] = np.sum([a for a in angles_dict.values()], axis=0)
+    for k, v in angles_dict.items():
+        k = "all_" + k.removeprefix("right_").removeprefix("left_")
+        if k not in all_dict:
+            all_dict[k] = np.array(v)
+        else:
+            all_dict[k] = all_dict[k] + np.array(v)
+    angles_dict.update(all_dict)
+
+    cats = [["_shoulder_up-down", "_shoulder_forward-back"],
+            ["_elbow"],
+            ["_knee"],
+            ["_leg_left-right", "_leg_forward-back"],
+            ["back_forward-back"]]
+    appended = []
+    for cat in cats:
+        tmp = []
+        for name in cat:
+            if name.startswith("back"):
+                tmp.extend([name])
+            else:
+                tmp.extend(["left" + name, "right" + name, "all" + name])
+        appended.append(tmp)
+
+    gs = GridSearch(Segmentation, 10, None, default_grid_w_valid_powerset(appended), cluster="kmedoids")
+    decomposer = Decomposer(k=None, valid_angles=None, grid_search=gs, reps=10)
+    return decomposer
+
 def get_decomposed():
 
     import pandas as pd
     import matplotlib.pyplot as plt
     # path = "/Users/rileywhite/wearable-computing/skill-estimation/jumping_jack_blaze.csv"
-    wpath = "/Users/rileywhite/wearable-computing/human-path-planning/data/jj_wlandmarks.csv"
-    path = "/Users/rileywhite/wearable-computing/human-path-planning/data/jj_landmarks.csv"
+    # wpath = "/Users/rileywhite/wearable-computing/human-path-planning/data/jj_wlandmarks.csv"
+    # path = "/Users/rileywhite/wearable-computing/human-path-planning/data/jj_landmarks.csv"
+    # path = "last_recording_landmarks.csv"
+    # wpath = "last_recording_wlandmarks.csv"
+    path = "three_piece_recording.csv"
+    wpath = "three_piece_wrecording.csv"
 
     # path = "jumping_jack_blaze.csv"
     # wpath = "jumping_jack_blaze.csv"
@@ -212,49 +262,46 @@ def get_decomposed():
     # angles, angles_dict, idx_dict = get_all_2d_angles(wjj) 
 
     angles_dict = j.blaze.get_all_angles_from_landmarks(jj,degrees=True)
-
-    valid = ["left_shoulder_up-down", # "left_shoulder_forward-back",
-            "right_shoulder_up-down",# "right_shoulder_forward-back",
-            # "right_leg_left-right", "left_leg_left-right",
-            "right_elbow", "left_elbow"]
-    decomposer = Decomposer(k=2, valid_angles=None, grid_search=True, reps=11)
+    decomposer = get_powerset_decomp(angles_dict)
+    # decomposer = Decomposer(k=None, valid_angles=angles_dict.keys(), grid_search=True, reps=10)
     activity, m = decomposer.decompose(angles_dict, jj)
 
-    fig, axes = decomposer.seg.plot_segmentation(angles_dict, True)
+    fig, axes = decomposer.seg.plot_segmentation(angles_dict, True, True)
     fig.show()
 
-    return activity, m
+    return activity, m, decomposer.k
 
 if __name__ == "__main__":
     import cv2
 
-    k = 2
+    k = None
     ### Uncomment this if you want a live recording decomposed
-    landmarks = []
-    frames = 0
-    for landmark, wlandmark, image in j.blaze.capture(return_image=True):
-        frames += 1
-        if frames < 50:
-            cv2.putText(image, "Get Ready", (100, 200), cv2.FONT_HERSHEY_SIMPLEX, 8, 255, thickness=10)
-            cv2.imshow("blaze", image)
-            continue
-        cv2.putText(image, "Go", (100, 200), cv2.FONT_HERSHEY_SIMPLEX, 8, 255, thickness=10)
-        cv2.imshow("blaze", image)
+    # landmarks = []
+    # frames = 0
+    # for landmark, wlandmark, image in j.blaze.capture(return_image=True):
+    #     frames += 1
+    #     if frames < 50:
+    #         cv2.putText(image, "Get Ready", (100, 200), cv2.FONT_HERSHEY_SIMPLEX, 8, 255, thickness=10)
+    #         cv2.imshow("blaze", image)
+    #         continue
+    #     cv2.putText(image, "Go", (100, 200), cv2.FONT_HERSHEY_SIMPLEX, 8, 255, thickness=10)
+    #     cv2.imshow("blaze", image)
 
-        landmarks.append(landmark)
-    landmarks = np.array(landmarks)
-    angles_dict = j.blaze.get_all_angles_from_landmarks(landmarks, degrees=True)
+    #     landmarks.append(landmark)
+    # landmarks = np.array(landmarks)
+    # angles_dict = j.blaze.get_all_angles_from_landmarks(landmarks, degrees=True)
 
-    decomposer = Decomposer(k=k, valid_angles=list(angles_dict.keys()), grid_search=True, reps=10)
-    activity, m = decomposer.decompose(angles_dict, landmarks)
+    # # decomposer = Decomposer(k=k, valid_angles=list(angles_dict.keys()), grid_search=True, reps=10)
+    # decomposer = get_powerset_decomp(angles_dict)
+    # activity, m = decomposer.decompose(angles_dict, landmarks)
 
-    fig, axes = decomposer.seg.plot_segmentation(angles_dict, True)
-    fig.show()
+    # fig, axes = decomposer.seg.plot_segmentation(angles_dict, True)
+    # fig.show()
 
+    # k = decomposer.k
     ### Uncomment this if you want a prerecorded activity
-    # activity, m = get_decomposed()
+    activity, m, k = get_decomposed()
 
-    print(activity.rules)
     cv2.destroyAllWindows()
     for i in range(k):
         j.blaze.vizualize(activity.rules[f"pose_{i}"].landmarks, name=f"pose_{i}")
