@@ -37,7 +37,6 @@ def record(subject, exercise):
         if cv2.waitKey(1) & 0xFF == 27:
             break
 
-    cv2.destroyWindow(window_name)
     # Hack to make sure the window closes quickly
     # Gives opencv2 more time to destroy window
     for i in range (4):
