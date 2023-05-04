@@ -6,12 +6,12 @@ import argparse
 import joints as j
 from activity_decomp.decomp import Decomposer
 
-K = {"jumping_jack": 2, "bicep_curl": 2, "high_knees": 3, "6_step_lunge": 4, "arm_raise": 5}
+K = {"jumping_jack": 2, "bicep_curl": 2, "high_knees": 3, "6_step_lunge": 4, "mil_press": 5}
 
 parser = argparse.ArgumentParser()
 parser.add_argument("subject", type=int, help="Subject number tha twill be recorded")
 parser.add_argument("exercise", type=str,
-                    help="one of [jumping_jack, bicep_curl, high_knees, 6_step_lunge, arm_raise]",
+                    help="one of [jumping_jack, bicep_curl, high_knees, 6_step_lunge, mil_press]",
                     choices=list(K.keys()))
 parser.add_argument("-o", "--overwrite", default=False, action='store_true',
                     help="If to overwrite the recording matching the subject and exercise")
