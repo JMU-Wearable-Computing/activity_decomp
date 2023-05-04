@@ -45,7 +45,7 @@ def record(subject, exercise):
     k = K[exercise]
     video = j.blaze.capture_video(video_file_name=file_name)
     landmarks = []
-    for landmark, wlandmark in j.blaze.capture(stream=video, file_name=file_name, return_image=False):
+    for landmark, wlandmark in j.blaze.capture(stream=video, file_name=file_name, return_image=False, model_complexity=2):
         landmarks.append(landmark)
 
     landmarks = np.array(landmarks)
@@ -69,8 +69,9 @@ def record(subject, exercise):
     decomposer = Decomposer(k=None, valid_angles=list(angles_dict.keys()), grid_search=True, reps=10)
     activity, m = decomposer.decompose(angles_dict, landmarks)
 
-    for i in range(k):
-        j.blaze.vizualize(activity.rules[f"pose_{i}"].landmarks, name=f"pose_{i}")
+    for name, rule in activity.rules.items():
+        if name != "init":
+            j.blaze.vizualize(rule.landmarks, name=name)
 
     while True:
         if cv2.waitKey(1) & 0xFF == 27:
